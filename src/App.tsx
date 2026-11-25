@@ -1,13 +1,56 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import AdminActivityLogPage from './pages/admin/AdminActivityLogPage'
+import AdminLayout from './components/admin/AdminLayout'
+import AdminCategoryPage from './pages/admin/AdminCategoryPage'
+import AdminCategoryAddPage from './pages/admin/AdminCategoryAddPage'
+import AdminCategoryEditPage from './pages/admin/AdminCategoryEditPage'
+import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import AdminFinancialReportPage from './pages/admin/AdminFinancialReportPage'
+import AdminLoginPage from './pages/admin/AdminLoginPage'
+import AdminMonitoringOrderPage from './pages/admin/AdminMonitoringOrderPage'
+import AdminStoreAuditLogPage from './pages/admin/AdminStoreAuditLogPage'
+import AdminStoreRelationPage from './pages/admin/AdminStoreRelationPage'
+import AdminUmkmDetailPage from './pages/admin/AdminUmkmDetailPage'
+import AdminUmkmListPage from './pages/admin/AdminUmkmListPage'
+import AdminUserManagementPage from './pages/admin/AdminUserManagementPage'
+
 export default function App() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-6 text-center">
-      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-800">
-        Techcomfest 2027
-      </span>
-      <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900">Ratis</h1>
-      <p className="mt-3 max-w-md text-slate-600">
-        Setup teknologi selesai. React, TypeScript, Vite, dan Tailwind CSS siap digunakan.
-      </p>
-    </main>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/admin/login" replace />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route element={<AdminLayout />}>
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+          <Route path="/admin/umkm" element={<AdminUmkmListPage />} />
+          <Route path="/admin/kelola-umkm" element={<AdminUmkmListPage />} />
+          <Route path="/admin/umkm/detail/:slug" element={<AdminUmkmDetailPage />} />
+          <Route path="/admin/umkm/:slug" element={<AdminUmkmDetailPage />} />
+          <Route path="/admin/kategori" element={<AdminCategoryPage />} />
+          <Route
+            path="/admin/kategori/tambah-kategori"
+            element={<AdminCategoryAddPage />}
+          />
+          <Route
+            path="/admin/kategori/edit-kategori/:id"
+            element={<AdminCategoryEditPage />}
+          />
+          <Route path="/admin/pesanan" element={<AdminMonitoringOrderPage />} />
+          <Route path="/admin/laporan-keuangan" element={<AdminFinancialReportPage />} />
+          <Route path="/admin/pengguna" element={<AdminUserManagementPage />} />
+          <Route path="/admin/kelola-pengguna" element={<AdminUserManagementPage />} />
+          <Route
+            path="/admin/kelola-pengguna/toko-terkait/:slug"
+            element={<AdminStoreRelationPage />}
+          />
+          <Route
+            path="/admin/kelola-pengguna/toko-terkait/:slug/audit-log-hubungan"
+            element={<AdminStoreAuditLogPage />}
+          />
+          <Route path="/admin/log" element={<AdminActivityLogPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/admin/login" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }

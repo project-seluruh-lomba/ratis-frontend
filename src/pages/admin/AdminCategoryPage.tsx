@@ -21,8 +21,9 @@ import ConfirmDialog from '../../components/admin/ConfirmDialog'
 import DeleteCategoryDialog from '../../components/admin/DeleteCategoryDialog'
 import {
   categoryMonthlyGrowth,
-  loadCategories,
-  persistCategories,
+  deleteCategory,
+  fetchCategories,
+  updateCategory,
   type CategoryRecord,
   type CategoryStatus,
 } from '../../lib/admin-category-data'
@@ -113,7 +114,10 @@ function StatCard({
 }
 
 export default function AdminCategoryPage() {
-  const [records, setRecords] = useState<CategoryRecord[]>(loadCategories)
+  const [records, setRecords] = useState<CategoryRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  async function load(){ setLoading(true); try{ setRecords(await fetchCategories()) }catch(e:any){ showToast(e?.userMessage||'Gagal memuat kategori.','error') } finally { setLoading(false) } }
+  useEffect(()=>{ load() },[])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('semua')
   const [sortOrder, setSortOrder] = useState<SortOrder>('produk')
@@ -123,9 +127,7 @@ export default function AdminCategoryPage() {
   const [toggleTarget, setToggleTarget] = useState<CategoryRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CategoryRecord | null>(null)
 
-  useEffect(() => {
-    persistCategories(records)
-  }, [records])
+
 
   useEffect(() => {
     if (!toast) return
@@ -190,86 +192,46 @@ export default function AdminCategoryPage() {
     safePage * pageSize,
   )
 
-  function handleToggleCategory() {
+  async function handleToggleCategory() {
     if (!toggleTarget) return
-
-    const nextStatus: CategoryStatus =
-      toggleTarget.status === 'aktif' ? 'nonaktif' : 'aktif'
-
-    setRecords((current) =>
-      current.map((record) =>
-        record.id === toggleTarget.id
-          ? { ...record, status: nextStatus, updatedAt: new Date().toISOString() }
-          : record,
-      ),
-    )
-
-    showToast(
-      nextStatus === 'aktif'
-        ? `Kategori ${toggleTarget.name} diaktifkan kembali.`
-        : `Kategori ${toggleTarget.name} dinonaktifkan.`,
-      nextStatus === 'aktif' ? 'success' : 'info',
-    )
-    setToggleTarget(null)
-  }
-
-  function handleDeactivateFromDeleteDialog() {
-    if (!deleteTarget) return
-
-    if (deleteTarget.status === 'aktif') {
-      setRecords((current) =>
-        current.map((record) =>
-          record.id === deleteTarget.id
-            ? { ...record, status: 'nonaktif', updatedAt: new Date().toISOString() }
-            : record,
-        ),
-      )
-      showToast(
-        `Kategori ${deleteTarget.name} dinonaktifkan. Produk lama tetap tersimpan.`,
-        'info',
-      )
-    } else {
-      showToast(`Kategori ${deleteTarget.name} sudah berstatus nonaktif.`, 'info')
+    const nextStatus: CategoryStatus = toggleTarget.status === 'aktif' ? 'nonaktif' : 'aktif'
+    try {
+      await updateCategory(toggleTarget.id, { status: nextStatus })
+      await load()
+      showToast(nextStatus === 'aktif' ? `Kategori ${toggleTarget.name} diaktifkan kembali.` : `Kategori ${toggleTarget.name} dinonaktifkan.`, nextStatus === 'aktif' ? 'success' : 'info')
+      setToggleTarget(null)
+    } catch (e: any) {
+      showToast(e?.userMessage || 'Gagal mengubah status.', 'error')
     }
-
-    setDeleteTarget(null)
   }
 
-  function handleMigrateProducts(replacementId: string) {
+  async function handleDeactivateFromDeleteDialog() {
     if (!deleteTarget) return
-
-    const replacement = records.find((record) => record.id === replacementId)
-    if (!replacement) return
-
-    const movedCount = deleteTarget.productCount
-    const now = new Date().toISOString()
-
-    setRecords((current) =>
-      current.map((record) => {
-        if (record.id === deleteTarget.id) {
-          return { ...record, productCount: 0, updatedAt: now }
-        }
-        if (record.id === replacementId) {
-          return { ...record, productCount: record.productCount + movedCount, updatedAt: now }
-        }
-        return record
-      }),
-    )
-    setDeleteTarget({ ...deleteTarget, productCount: 0 })
-    showToast(
-      `${movedCount.toLocaleString('id-ID')} produk dialihkan ke ${replacement.name}.`,
-      'success',
-    )
+    try {
+      if (deleteTarget.status === 'aktif') await updateCategory(deleteTarget.id, { status: 'nonaktif' })
+      await load()
+      showToast(`Kategori ${deleteTarget.name} dinonaktifkan.`, 'info')
+      setDeleteTarget(null)
+    } catch (e: any) {
+      showToast(e?.userMessage || 'Gagal menonaktifkan kategori.', 'error')
+    }
   }
 
-  function handleDeleteCategory() {
+  function handleMigrateProducts(_replacementId: string) {
+    showToast('Migrasi produk antar kategori belum tersedia di backend.', 'info')
+  }
+
+  async function handleDeleteCategory() {
     if (!deleteTarget || deleteTarget.productCount > 0) return
-
-    setRecords((current) => current.filter((record) => record.id !== deleteTarget.id))
-    showToast(`Kategori ${deleteTarget.name} dihapus dari taksonomi global.`, 'info')
-    setDeleteTarget(null)
+    try {
+      await deleteCategory(deleteTarget.id)
+      await load()
+      showToast(`Kategori ${deleteTarget.name} dihapus.`, 'success')
+      setDeleteTarget(null)
+    } catch (e: any) {
+      showToast(e?.userMessage || 'Gagal menghapus kategori.', 'error')
+    }
   }
-
   function handleExport() {
     const header = [
       'Nama Kategori',
@@ -505,7 +467,7 @@ export default function AdminCategoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {visibleCategories.length === 0 ? (
+              {loading ? (<tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">Memuat kategori...</td></tr>) : visibleCategories.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
                     <div className="flex flex-col items-center justify-center px-6 py-16 text-center">

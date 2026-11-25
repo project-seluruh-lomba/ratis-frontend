@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+﻿import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -10,7 +10,8 @@ import {
   Search,
   Store,
 } from 'lucide-react'
-import { pendingUmkm } from '../../lib/admin-dashboard-data'
+import { useQuery } from '@tanstack/react-query'
+import { shopsApi } from '../../lib/api/services'
 import { clearAdminSession } from '../../lib/auth'
 
 type AdminTopbarProps = {
@@ -36,6 +37,9 @@ export default function AdminTopbar({
   role,
 }: AdminTopbarProps) {
   const navigate = useNavigate()
+  const { data: pendingData } = useQuery({ queryKey: ['pending-shops-topbar'], queryFn: () => shopsApi.list({ status: 'pending', limit: 5, page: 1 }) })
+  const pendingList = pendingData?.data ?? []
+  const pendingTotal = pendingData?.meta?.total ?? 0
   const [query, setQuery] = useState('')
   const [bellOpen, setBellOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -104,12 +108,12 @@ export default function AdminTopbar({
                 <div className="flex items-center justify-between px-2 pb-1.5 pt-1">
                   <p className="text-sm font-bold text-ink">Notifikasi</p>
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                    {pendingUmkm.length} baru
+                    {pendingTotal} baru
                   </span>
                 </div>
                 <ul className="mt-1 space-y-0.5">
-                  {pendingUmkm.map((item) => (
-                    <li key={item.slug}>
+                  {pendingList.map((item) => (
+                    <li key={item.id}>
                       <Link
                         to={`/admin/umkm/${item.slug}`}
                         onClick={() => setBellOpen(false)}
@@ -123,7 +127,7 @@ export default function AdminTopbar({
                             {item.name}
                           </span>
                           <span className="mt-0.5 block text-[10px] text-muted">
-                            Menunggu verifikasi • {item.waiting}
+                            Menunggu verifikasi â€¢ {new Date(item.createdAt).toLocaleDateString('id-ID')}
                           </span>
                         </span>
                       </Link>
@@ -195,3 +199,9 @@ export default function AdminTopbar({
     </header>
   )
 }
+
+
+
+
+
+

@@ -1,16 +1,23 @@
-import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { Navigate, Outlet } from 'react-router-dom'
 import AdminSidebar from './AdminSidebar'
 import AdminTopbar from './AdminTopbar'
-import { getAdminSession } from '../../lib/auth'
+import { clearAdminSession, getAdminSession } from '../../lib/auth'
+import { authApi } from '../../lib/api/services'
 
 export default function AdminLayout() {
-  const [session] = useState(getAdminSession)
+  const [session, setSession] = useState(getAdminSession)
+  const [checking, setChecking] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  if (!session) {
-    return <Navigate to="/admin/login" replace />
-  }
+  useEffect(() => {
+    const s = getAdminSession()
+    if (!s?.token) { setChecking(false); setSession(null); return }
+    authApi.me().then((user) => { setSession({ ...s, id: user.id, name: user.name, email: user.email, role: user.role as any }); setChecking(false) }).catch(() => { clearAdminSession(); setSession(null); setChecking(false) })
+  }, [])
+
+  if (checking) return <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Memuat sesi...</div>
+  if (!session) return <Navigate to="/admin/login" replace />
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -29,3 +36,4 @@ export default function AdminLayout() {
     </div>
   )
 }
+

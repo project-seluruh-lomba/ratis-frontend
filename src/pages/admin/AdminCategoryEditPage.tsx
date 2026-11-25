@@ -21,8 +21,8 @@ import {
 import AdminToast, { type ToastTone } from '../../components/admin/AdminToast'
 import ConfirmDialog from '../../components/admin/ConfirmDialog'
 import {
-  loadCategories,
-  persistCategories,
+  fetchCategories,
+  updateCategory,
   type CategoryIconKey,
   type CategoryRecord,
   type CategoryStatus,
@@ -116,13 +116,15 @@ function Section({
 export default function AdminCategoryEditPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const records = useMemo(() => loadCategories(), [])
+  const [records, setRecords] = useState<CategoryRecord[]>([]);
+  useEffect(() => { fetchCategories().then(setRecords).catch(()=>{}) }, [])
   const record = useMemo(() => records.find((item) => item.id === id), [records, id])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [name, setName] = useState(record?.name ?? '')
   const [nameTouched, setNameTouched] = useState(false)
   const [slug, setSlug] = useState(record?.slug ?? '')
+  const [, setSavedRecord] = useState<CategoryRecord | null>(null)
   const [parent, setParent] = useState('')
   const [kbli, setKbli] = useState('10794')
   const [description, setDescription] = useState(record?.description ?? '')
@@ -201,7 +203,7 @@ export default function AdminCategoryEditPage() {
       updatedAt: new Date().toISOString(),
     }
 
-    persistCategories(records.map((item) => (item.id === record.id ? updated : item)))
+    void records; void setSavedRecord; updateCategory(record.id,{name:updated.name,status:updated.status}).then(()=>{ void updated; navigate('/admin/kategori') }).catch((e:any)=>showToast(e?.userMessage||'Gagal menyimpan kategori.','error')); return
     return updated
   }
 

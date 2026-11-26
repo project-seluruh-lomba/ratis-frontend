@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+﻿import { Navigate, Route, Routes } from 'react-router-dom'
 import AdminActivityLogPage from './pages/admin/AdminActivityLogPage'
 import AdminLayout from './components/admin/AdminLayout'
 import AdminCategoryPage from './pages/admin/AdminCategoryPage'
@@ -28,57 +28,56 @@ import OwnerLayout from './components/owner/OwnerLayout'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<OwnerLoginPage />} />
-        <Route path="/owner/login" element={<Navigate to="/" replace />} />
-        <Route path="/owner/daftar" element={<OwnerRegisterPage />} />
-        <Route element={<OwnerLayout />}>
-          <Route path="/owner" element={<Navigate to="/owner/dashboard" replace />} />
-          <Route path="/owner/dashboard" element={<OwnerDashboardPage />} />
-          <Route path="/owner/pesanan" element={<OwnerOrderListPage />} />
-          <Route path="/owner/pesanan/:id" element={<OwnerOrderDetailPage />} />
-          <Route path="/owner/keuangan" element={<OwnerFinancePage />} />
-          <Route path="/owner/produk" element={<OwnerProductStockPage />} />
-          <Route path="/owner/produk/baru" element={<OwnerProductFormPage />} />
-          <Route path="/owner/produk/:id" element={<OwnerProductDetailPage />} />
-          <Route path="/owner/produk-stok" element={<OwnerProductStockPage />} />
-          <Route path="/owner/pratinjau" element={<OwnerStorefrontPreviewPage />} />
-          <Route path="/owner/*" element={<OwnerPlaceholderPage />} />
-        </Route>
-        <Route path="/admin-login" element={<AdminLoginPage />} />
-        <Route path="/admin/login" element={<Navigate to="/admin-login" replace />} />
-        <Route element={<AdminLayout />}>
-          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-          <Route path="/admin/umkm" element={<AdminUmkmListPage />} />
-          <Route path="/admin/kelola-umkm" element={<AdminUmkmListPage />} />
-          <Route path="/admin/umkm/detail/:slug" element={<AdminUmkmDetailPage />} />
-          <Route path="/admin/umkm/:slug" element={<AdminUmkmDetailPage />} />
-          <Route path="/admin/kategori" element={<AdminCategoryPage />} />
-          <Route
-            path="/admin/kategori/tambah-kategori"
-            element={<AdminCategoryAddPage />}
-          />
-          <Route
-            path="/admin/kategori/edit-kategori/:id"
-            element={<AdminCategoryEditPage />}
-          />
-          <Route path="/admin/pesanan" element={<AdminMonitoringOrderPage />} />
-          <Route path="/admin/laporan-keuangan" element={<AdminFinancialReportPage />} />
-          <Route path="/admin/pengguna" element={<AdminUserManagementPage />} />
-          <Route path="/admin/kelola-pengguna" element={<AdminUserManagementPage />} />
-          <Route
-            path="/admin/kelola-pengguna/toko-terkait/:slug"
-            element={<AdminStoreRelationPage />}
-          />
-          <Route
-            path="/admin/kelola-pengguna/toko-terkait/:slug/audit-log-hubungan"
-            element={<AdminStoreAuditLogPage />}
-          />
-          <Route path="/admin/log" element={<AdminActivityLogPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/" element={<OwnerLoginPage />} />
+      <Route path="/owner/login" element={<Navigate to="/" replace />} />
+      <Route path="/owner/daftar" element={<OwnerRegisterPage />} />
+      <Route element={<OwnerLayout />}>
+        <Route path="/owner" element={<Navigate to="/owner/dashboard" replace />} />
+        <Route path="/owner/dashboard" element={<OwnerDashboardPage />} />
+        <Route path="/owner/pesanan" element={<OwnerOrderListPage />} />
+        <Route path="/owner/pesanan/:id" element={<OwnerOrderDetailPage />} />
+        <Route path="/owner/keuangan" element={<OwnerFinancePage />} />
+        <Route path="/owner/produk" element={<OwnerProductStockPage />} />
+        <Route path="/owner/produk/baru" element={<OwnerProductFormPage />} />
+        <Route path="/owner/produk/:id" element={<OwnerProductDetailPage />} />
+        <Route path="/owner/produk-stok" element={<OwnerProductStockPage />} />
+        <Route path="/owner/pratinjau" element={<OwnerStorefrontPreviewPage />} />
+        <Route path="/owner/*" element={<OwnerPlaceholderPage />} />
+      </Route>
+      <Route path="/admin-login" element={<AdminLoginPage />} />
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route element={<AdminLayout />}>
+        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+        <Route path="/admin/umkm" element={<AdminUmkmListPage />} />
+        <Route path="/admin/kelola-umkm" element={<AdminUmkmListPage />} />
+        <Route path="/admin/umkm/detail/:id" element={<AdminUmkmDetailPage />} />
+        <Route path="/admin/umkm/:id" element={<AdminUmkmDetailPage />} />
+        <Route path="/admin/kategori" element={<AdminCategoryPage />} />
+        <Route
+          path="/admin/kategori/tambah-kategori"
+          element={<AdminCategoryAddPage />}
+        />
+        <Route
+          path="/admin/kategori/edit-kategori/:id"
+          element={<AdminCategoryEditPage />}
+        />
+        <Route path="/admin/pesanan" element={<AdminMonitoringOrderPage />} />
+        <Route path="/admin/laporan-keuangan" element={<AdminFinancialReportPage />} />
+        <Route path="/admin/pengguna" element={<AdminUserManagementPage />} />
+        <Route path="/admin/kelola-pengguna" element={<AdminUserManagementPage />} />
+        <Route
+          path="/admin/kelola-pengguna/toko-terkait/:slug"
+          element={<AdminStoreRelationPage />}
+        />
+        <Route
+          path="/admin/kelola-pengguna/toko-terkait/:slug/audit-log-hubungan"
+          element={<AdminStoreAuditLogPage />}
+        />
+        <Route path="/admin/log" element={<AdminActivityLogPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
+

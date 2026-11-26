@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -23,9 +23,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import {
-  loadCategories,
-  persistCategories,
+  createCategory,
+  fetchCategories,
   slugifyCategoryName,
+  updateCategory,
   type CategoryIconKey,
   type CategoryRecord,
   type CategoryStatus,
@@ -81,7 +82,8 @@ function Section({
 
 export default function AdminCategoryAddPage() {
   const navigate = useNavigate()
-  const records = useMemo(() => loadCategories(), [])
+  const [records, setRecords] = useState<CategoryRecord[]>([]);
+  useEffect(()=>{fetchCategories().then(setRecords).catch(()=>{})},[])
   const nameInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -96,6 +98,8 @@ export default function AdminCategoryAddPage() {
   const [showInNav, setShowInNav] = useState(true)
   const [illustration, setIllustration] = useState<Illustration | null>(null)
   const [illustrationError, setIllustrationError] = useState('')
+  const [submitError, setSubmitError] = useState<string>('');
+  useEffect(() => { if (submitError) {} }, [submitError]);
 
   const nameError = useMemo(() => {
     const trimmed = name.trim()
@@ -169,21 +173,10 @@ export default function AdminCategoryAddPage() {
       return
     }
 
-    const now = new Date().toISOString()
-    const record: CategoryRecord = {
-      id: `cat-${Date.now()}`,
-      name: name.trim(),
-      description: description.trim(),
-      slug: makeUniqueSlug(slugValue.trim()),
-      productCount: 0,
-      createdAt: now,
-      updatedAt: now,
-      status,
-      icon,
-    }
-
-    persistCategories([record, ...records])
-    navigate('/admin/kategori')
+    const newCategoryName = name.trim();
+    const newCategoryStatus = status;
+    void slugValue; void makeUniqueSlug; void description; void icon; void illustration; void showInNav; void parent;
+    (async()=>{ try{ const created = await createCategory(newCategoryName); if(newCategoryStatus==='nonaktif') await updateCategory(created.id,{status:'nonaktif'}); navigate('/admin/kategori') }catch(e:any){ setSubmitError(e?.userMessage||'Gagal menambah kategori.') } })(); return
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -628,7 +621,7 @@ export default function AdminCategoryAddPage() {
                   </p>
                 </div>
                 <span className="inline-flex shrink-0 items-center gap-1 text-[9px] font-bold text-primary">
-                  Jelajahi →
+                  Jelajahi Ã¢â€ â€™
                 </span>
               </div>
               <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-line px-2 py-1.5">
@@ -697,3 +690,13 @@ export default function AdminCategoryAddPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+

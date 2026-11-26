@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+﻿import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -198,7 +198,7 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="relative z-10 flex flex-col gap-2 border-t border-white/15 pt-5 text-[11px] text-white/60 sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 Platform Ratis UMKM Indonesia.</p>
+          <p>Â© 2026 Platform Ratis UMKM Indonesia.</p>
           <div className="flex gap-6">
             <span>Panduan Keamanan</span>
             <span>Pusat Bantuan Admin</span>
@@ -415,3 +415,5 @@ export default function AdminLoginPage() {
     </div>
   )
 }
+
+

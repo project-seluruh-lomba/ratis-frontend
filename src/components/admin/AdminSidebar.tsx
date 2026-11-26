@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+﻿import { NavLink } from 'react-router-dom'
 import {
   BarChart3,
   Boxes,
@@ -10,7 +10,8 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { pendingUmkm } from '../../lib/admin-dashboard-data'
+import { useQuery } from '@tanstack/react-query'
+import { shopsApi } from '../../lib/api/services'
 
 type AdminSidebarProps = {
   open: boolean
@@ -19,13 +20,15 @@ type AdminSidebarProps = {
 
 const navigation = [
   { label: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
-  { label: 'Kelola UMKM', to: '/admin/umkm', icon: Store, badge: pendingUmkm.length },
+  { label: 'Kelola UMKM', to: '/admin/umkm', icon: Store, badge: 'pending' },
   { label: 'Kelola Kategori', to: '/admin/kategori', icon: Boxes },
   { label: 'Monitoring Pesanan', to: '/admin/pesanan', icon: ShoppingBag },
   { label: 'Laporan Keuangan', to: '/admin/laporan-keuangan', icon: BarChart3 },
   { label: 'Kelola Pengguna', to: '/admin/kelola-pengguna', icon: Users },
   { label: 'Log Aktivitas', to: '/admin/log', icon: History, tag: 'Cloud' },
 ]
+
+const usePending = () => { const { data } = useQuery({ queryKey: ['pending-shops-sidebar'], queryFn: () => shopsApi.list({ status: 'pending', limit: 1, page: 1 }) }); return data?.meta?.total ?? 0 };
 
 function SidebarContent({
   onNavigate,
@@ -34,6 +37,7 @@ function SidebarContent({
   onNavigate?: () => void
   drawer?: boolean
 }) {
+  const pendingCount = usePending()
   return (
     <>
       <div
@@ -78,9 +82,9 @@ function SidebarContent({
               >
                 <Icon className="size-[18px] shrink-0" />
                 <span className="flex-1 truncate">{label}</span>
-                {badge ? (
+                {(badge === 'pending' ? pendingCount > 0 : !!badge) ? (
                   <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">
-                    {badge}
+                    {badge === 'pending' ? pendingCount : badge}
                   </span>
                 ) : null}
                 {tag ? (
@@ -143,3 +147,6 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
     </>
   )
 }
+
+
+

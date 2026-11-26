@@ -49,7 +49,7 @@ export default function AdminTopbar({
 
   function handleLogout() {
     clearAdminSession()
-    navigate('/admin/login', { replace: true })
+    navigate('/admin-login', { replace: true })
   }
 
   return (

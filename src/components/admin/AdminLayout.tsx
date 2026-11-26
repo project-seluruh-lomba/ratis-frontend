@@ -9,7 +9,7 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   if (!session) {
-    return <Navigate to="/admin/login" replace />
+    return <Navigate to="/admin-login" replace />
   }
 
   return (

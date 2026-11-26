@@ -11,6 +11,7 @@ export type AuthErrorCode =
   | 'invalid-credentials'
   | 'account-disabled'
   | 'rate-limited'
+  | 'email-taken'
   | 'network'
   | 'unknown'
 

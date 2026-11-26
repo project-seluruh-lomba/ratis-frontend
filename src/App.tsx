@@ -13,13 +13,41 @@ import AdminStoreRelationPage from './pages/admin/AdminStoreRelationPage'
 import AdminUmkmDetailPage from './pages/admin/AdminUmkmDetailPage'
 import AdminUmkmListPage from './pages/admin/AdminUmkmListPage'
 import AdminUserManagementPage from './pages/admin/AdminUserManagementPage'
+import OwnerDashboardPage from './pages/owner/OwnerDashboardPage'
+import OwnerFinancePage from './pages/owner/OwnerFinancePage'
+import OwnerLoginPage from './pages/owner/OwnerLoginPage'
+import OwnerOrderDetailPage from './pages/owner/OwnerOrderDetailPage'
+import OwnerOrderListPage from './pages/owner/OwnerOrderListPage'
+import OwnerPlaceholderPage from './pages/owner/OwnerPlaceholderPage'
+import OwnerProductDetailPage from './pages/owner/OwnerProductDetailPage'
+import OwnerProductFormPage from './pages/owner/OwnerProductFormPage'
+import OwnerProductStockPage from './pages/owner/OwnerProductStockPage'
+import OwnerRegisterPage from './pages/owner/OwnerRegisterPage'
+import OwnerStorefrontPreviewPage from './pages/owner/OwnerStorefrontPreviewPage'
+import OwnerLayout from './components/owner/OwnerLayout'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/admin/login" replace />} />
-        <Route path="/admin/login" element={<AdminLoginPage />} />
+        <Route path="/" element={<OwnerLoginPage />} />
+        <Route path="/owner/login" element={<Navigate to="/" replace />} />
+        <Route path="/owner/daftar" element={<OwnerRegisterPage />} />
+        <Route element={<OwnerLayout />}>
+          <Route path="/owner" element={<Navigate to="/owner/dashboard" replace />} />
+          <Route path="/owner/dashboard" element={<OwnerDashboardPage />} />
+          <Route path="/owner/pesanan" element={<OwnerOrderListPage />} />
+          <Route path="/owner/pesanan/:id" element={<OwnerOrderDetailPage />} />
+          <Route path="/owner/keuangan" element={<OwnerFinancePage />} />
+          <Route path="/owner/produk" element={<OwnerProductStockPage />} />
+          <Route path="/owner/produk/baru" element={<OwnerProductFormPage />} />
+          <Route path="/owner/produk/:id" element={<OwnerProductDetailPage />} />
+          <Route path="/owner/produk-stok" element={<OwnerProductStockPage />} />
+          <Route path="/owner/pratinjau" element={<OwnerStorefrontPreviewPage />} />
+          <Route path="/owner/*" element={<OwnerPlaceholderPage />} />
+        </Route>
+        <Route path="/admin-login" element={<AdminLoginPage />} />
+        <Route path="/admin/login" element={<Navigate to="/admin-login" replace />} />
         <Route element={<AdminLayout />}>
           <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
           <Route path="/admin/umkm" element={<AdminUmkmListPage />} />
@@ -49,7 +77,7 @@ export default function App() {
           />
           <Route path="/admin/log" element={<AdminActivityLogPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/admin/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

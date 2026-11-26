@@ -403,7 +403,7 @@ export default function AdminLoginPage() {
               atau{' '}
               <button
                 type="button"
-                onClick={() => setNotice('Portal mitra pedagang akan tersedia pada rilis berikutnya.')}
+                onClick={() => navigate('/')}
                 className="font-semibold text-primary transition hover:text-primary-hover hover:underline"
               >
                 Portal Mitra Pedagang

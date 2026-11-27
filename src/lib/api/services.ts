@@ -1,5 +1,5 @@
 ﻿import { api } from './client';
-import type { Category, DashboardData, LoginResponse, Paginated, ShopDetail, ShopListItem, ShopStatus } from './types';
+import type { BatchPayoutResult, Category, DashboardData, LoginResponse, Paginated, PayoutRecord, ShopDetail, ShopListItem, ShopStatus } from './types';
 
 export const authApi = {
   login: (body: { email: string; password: string }) => api.post<LoginResponse>('/auth/login', body).then((r) => r.data),
@@ -25,4 +25,10 @@ export const categoriesApi = {
 
 export const dashboardApi = {
   get: (range: 7 | 30) => api.get<DashboardData>('/admin/dashboard', { params: { range } }).then((r) => r.data),
+};
+
+export const payoutsApi = {
+  list: () => api.get<PayoutRecord[]>('/admin/payouts').then((r) => r.data),
+  processBatch: (ids: string[]) =>
+    api.post<BatchPayoutResult>('/admin/payouts/batch-process', { ids }).then((r) => r.data),
 };

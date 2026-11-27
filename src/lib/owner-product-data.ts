@@ -234,6 +234,30 @@ export function updateOwnerProduct(product: OwnerProduct) {
   if (index >= 0) productStore[index] = { ...product }
 }
 
+export function findOwnerProductByName(name: string) {
+  const normalized = name.trim().toLowerCase()
+  const exact = productStore.find(
+    (product) => product.name.trim().toLowerCase() === normalized,
+  )
+  if (exact) return exact
+
+  const tokens = normalized.split(/\s+/).filter((token) => token.length > 3)
+  if (tokens.length === 0) return undefined
+
+  return productStore.find((product) => {
+    const productTokens = new Set(product.name.trim().toLowerCase().split(/\s+/))
+    return tokens.every((token) => productTokens.has(token))
+  })
+}
+
+export function restoreProductStock(items: { name: string; qty: number }[]) {
+  for (const item of items) {
+    const product = findOwnerProductByName(item.name)
+    if (!product) continue
+    updateOwnerProduct({ ...product, stock: product.stock + item.qty })
+  }
+}
+
 export function getProductStockStatus(product: OwnerProduct): ProductStockStatus {
   if (product.stock <= 0) return 'habis'
   if (product.stock <= product.minStock) return 'menipis'

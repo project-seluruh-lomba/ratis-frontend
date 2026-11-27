@@ -18,3 +18,24 @@ export type DashboardData = {
   topShops: { shopId: string; name: string; slug: string; omzet: number; completedOrders: number }[];
 };
 export type Paginated<T> = { data: T[]; meta: { page: number; limit: number; total: number } };
+export type PayoutStatus = 'menunggu' | 'diverifikasi' | 'berhasil' | 'terkirim';
+export type PayoutRecord = {
+  id: string;
+  storeName: string;
+  owner: string;
+  bank: string;
+  account: string;
+  method: string;
+  netAmount: number;
+  commission: number;
+  submittedAt: string;
+  status: PayoutStatus;
+};
+export type BatchPayoutResult = {
+  processedCount: number;
+  processedIds: string[];
+  skippedIds: string[];
+  totalNet: number;
+  totalCommission: number;
+  processedAt: string;
+};

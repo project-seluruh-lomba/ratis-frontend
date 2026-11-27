@@ -493,7 +493,7 @@ export default function OwnerDashboardPage() {
           </ul>
 
           <Link
-            to="/owner/laporan"
+            to="/owner/laporan-keuangan"
             className="mt-4 flex items-center justify-center gap-1.5 border-t border-line pt-4 text-[11.5px] font-semibold text-primary transition hover:text-primary-hover"
           >
             Lihat Laporan Produk Selengkapnya

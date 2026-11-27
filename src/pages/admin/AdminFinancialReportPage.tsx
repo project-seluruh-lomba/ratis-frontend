@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   Banknote,
   CalendarDays,
   ChevronDown,
@@ -23,6 +25,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import AdminToast, { type ToastTone } from '../../components/admin/AdminToast'
+import BatchPayoutModal from '../../components/admin/BatchPayoutModal'
 import FinanceTrendChart from '../../components/admin/FinanceTrendChart'
 import {
   auditEntries,
@@ -30,9 +33,10 @@ import {
   escrowAccount,
   financeDays,
   financeMonthLabel,
-  payoutRequests,
+  type PayoutRecord,
   type PayoutStatus,
 } from '../../lib/admin-finance-data'
+import { payoutsApi } from '../../lib/api/services'
 
 type Period = 'hari-ini' | '7-hari' | 'bulan-ini' | 'kustom'
 type PayoutTab = 'semua' | PayoutStatus
@@ -65,6 +69,10 @@ const payoutTabs: { value: PayoutTab; label: string }[] = [
 
 const tierIcons = [UtensilsCrossed, Hammer, Shirt]
 
+function isActionable(status: PayoutStatus) {
+  return status === 'menunggu' || status === 'diverifikasi'
+}
+
 const numberFormatter = new Intl.NumberFormat('id-ID')
 
 const clockFormatter = new Intl.DateTimeFormat('id-ID', {
@@ -84,10 +92,6 @@ const payoutTimeFormatter = new Intl.DateTimeFormat('id-ID', {
   timeZone: 'Asia/Jakarta',
 })
 
-const payoutBanks = [...new Set(payoutRequests.map((payout) => payout.bank))].sort((first, second) =>
-  first.localeCompare(second, 'id'),
-)
-
 function formatRupiah(value: number) {
   return `Rp ${numberFormatter.format(value)}`
 }
@@ -106,12 +110,20 @@ export default function AdminFinancialReportPage() {
   const [customStart, setCustomStart] = useState(financeDays[0].date)
   const [customEnd, setCustomEnd] = useState(financeDays[financeDays.length - 1].date)
   const [syncedAt, setSyncedAt] = useState(() => new Date())
-  const [payouts, setPayouts] = useState(payoutRequests)
+  const queryClient = useQueryClient()
+  const {
+    data: payouts = [],
+    isLoading: payoutsLoading,
+    isError: payoutsError,
+    refetch: refetchPayouts,
+  } = useQuery({ queryKey: ['admin-payouts'], queryFn: payoutsApi.list })
+  const [processing, setProcessing] = useState(false)
   const [statusTab, setStatusTab] = useState<PayoutTab>('semua')
   const [keyword, setKeyword] = useState('')
   const [bankFilter, setBankFilter] = useState('semua')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [batchOpen, setBatchOpen] = useState(false)
   const [auditFilter, setAuditFilter] = useState<'terbaru' | 'semua'>('terbaru')
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null)
 
@@ -149,6 +161,14 @@ export default function AdminFinancialReportPage() {
   )
   const readyTotal = readyPayouts.reduce((total, payout) => total + payout.netAmount, 0)
 
+  const payoutBanks = useMemo(
+    () =>
+      [...new Set(payouts.map((payout) => payout.bank))].sort((first, second) =>
+        first.localeCompare(second, 'id'),
+      ),
+    [payouts],
+  )
+
   const payoutCounts = useMemo(
     () => ({
       semua: payouts.length,
@@ -181,28 +201,57 @@ export default function AdminFinancialReportPage() {
     (number) => number === 1 || number === pageCount || Math.abs(number - safePage) <= 1,
   )
 
+  const selectableVisiblePayouts = visiblePayouts.filter((payout) => isActionable(payout.status))
   const allVisibleSelected =
-    visiblePayouts.length > 0 && visiblePayouts.every((payout) => selectedIds.includes(payout.id))
+    selectableVisiblePayouts.length > 0 &&
+    selectableVisiblePayouts.every((payout) => selectedIds.includes(payout.id))
+  const selectedPayouts = payouts.filter((payout) => selectedIds.includes(payout.id))
 
   const visibleAudit =
     auditFilter === 'terbaru' ? auditEntries.slice(0, AUDIT_PREVIEW_COUNT) : auditEntries
 
-  function handleProcessBatch() {
-    if (selectedIds.length === 0) return
+  function handleOpenBatch() {
+    if (selectedPayouts.length === 0) return
+    setBatchOpen(true)
+  }
 
-    const processedCount = selectedIds.length
-    setPayouts((current) =>
-      current.map((payout) =>
-        selectedIds.includes(payout.id) ? { ...payout, status: 'berhasil' } : payout,
-      ),
-    )
-    setSelectedIds([])
-    showToast(
-      `${processedCount} pengajuan pencairan diproses. Dana akan masuk ke rekening merchant pada kliring berikutnya.`,
-    )
+  async function handleConfirmBatch() {
+    const actionableIds = selectedPayouts
+      .filter((payout) => isActionable(payout.status))
+      .map((payout) => payout.id)
+
+    if (actionableIds.length === 0) {
+      setBatchOpen(false)
+      return
+    }
+
+    setProcessing(true)
+    try {
+      const result = await payoutsApi.processBatch(actionableIds)
+      queryClient.setQueryData<PayoutRecord[]>(['admin-payouts'], (current) =>
+        current?.map((payout) =>
+          result.processedIds.includes(payout.id) ? { ...payout, status: 'berhasil' } : payout,
+        ),
+      )
+      setSelectedIds([])
+      setBatchOpen(false)
+      showToast(
+        `${result.processedCount} pengajuan pencairan diproses. Dana akan masuk ke rekening merchant pada kliring berikutnya.`,
+      )
+    } catch (error) {
+      const message =
+        (error as { userMessage?: string })?.userMessage ||
+        'Gagal memproses batch pencairan. Periksa koneksi ke server lalu coba lagi.'
+      showToast(message, 'error')
+    } finally {
+      setProcessing(false)
+    }
   }
 
   function handleToggleSelect(id: string) {
+    const payout = payouts.find((item) => item.id === id)
+    if (!payout || !isActionable(payout.status)) return
+
     setSelectedIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
     )
@@ -211,14 +260,14 @@ export default function AdminFinancialReportPage() {
   function handleToggleSelectAll() {
     if (allVisibleSelected) {
       setSelectedIds((current) =>
-        current.filter((id) => !visiblePayouts.some((payout) => payout.id === id)),
+        current.filter((id) => !selectableVisiblePayouts.some((payout) => payout.id === id)),
       )
       return
     }
 
     setSelectedIds((current) => [
       ...current,
-      ...visiblePayouts
+      ...selectableVisiblePayouts
         .filter((payout) => !current.includes(payout.id))
         .map((payout) => payout.id),
     ])
@@ -301,6 +350,15 @@ export default function AdminFinancialReportPage() {
     <div>
       {toast && (
         <AdminToast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />
+      )}
+
+      {batchOpen && (
+        <BatchPayoutModal
+          payouts={selectedPayouts}
+          processing={processing}
+          onClose={() => setBatchOpen(false)}
+          onConfirm={handleConfirmBatch}
+        />
       )}
 
       <section>
@@ -574,7 +632,7 @@ export default function AdminFinancialReportPage() {
               </div>
               <button
                 type="button"
-                onClick={handleProcessBatch}
+                onClick={handleOpenBatch}
                 disabled={selectedIds.length === 0}
                 className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-primary px-3 text-[10px] font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-slate-300"
               >
@@ -660,8 +718,14 @@ export default function AdminFinancialReportPage() {
                         type="checkbox"
                         checked={allVisibleSelected}
                         onChange={handleToggleSelectAll}
+                        disabled={selectableVisiblePayouts.length === 0}
                         aria-label="Pilih semua pengajuan pada halaman ini"
-                        className="size-3.5 cursor-pointer accent-[#0f766e]"
+                        title={
+                          selectableVisiblePayouts.length === 0
+                            ? 'Tidak ada pengajuan yang dapat diproses pada halaman ini'
+                            : 'Pilih semua pengajuan yang dapat diproses'
+                        }
+                        className="size-3.5 cursor-pointer accent-[#0f766e] disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </th>
                     <th className="px-2 py-2.5 font-bold">ID Payout</th>
@@ -673,7 +737,46 @@ export default function AdminFinancialReportPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {visiblePayouts.length === 0 ? (
+                  {payoutsLoading ? (
+                    <tr>
+                      <td colSpan={7}>
+                        <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+                          <span className="flex size-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                            <RefreshCw className="size-5 animate-spin" />
+                          </span>
+                          <h3 className="mt-3 text-sm font-bold text-ink">
+                            Memuat pengajuan pencairan
+                          </h3>
+                          <p className="mt-1 max-w-xs text-[10px] leading-relaxed text-muted">
+                            Mengambil data terbaru dari server...
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : payoutsError ? (
+                    <tr>
+                      <td colSpan={7}>
+                        <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+                          <span className="flex size-11 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                            <AlertTriangle className="size-5" />
+                          </span>
+                          <h3 className="mt-3 text-sm font-bold text-ink">
+                            Gagal memuat pengajuan
+                          </h3>
+                          <p className="mt-1 max-w-xs text-[10px] leading-relaxed text-muted">
+                            Periksa koneksi ke server backend lalu coba lagi.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void refetchPayouts()}
+                            className="mt-3 rounded-xl border border-line bg-white px-3.5 py-1.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                          >
+                            Coba lagi
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : visiblePayouts.length === 0 ? (
                     <tr>
                       <td colSpan={7}>
                         <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
@@ -713,8 +816,14 @@ export default function AdminFinancialReportPage() {
                               type="checkbox"
                               checked={checked}
                               onChange={() => handleToggleSelect(payout.id)}
+                              disabled={!isActionable(payout.status)}
                               aria-label={`Pilih pengajuan ${payout.id}`}
-                              className="size-3.5 cursor-pointer accent-[#0f766e]"
+                              title={
+                                isActionable(payout.status)
+                                  ? `Pilih pengajuan ${payout.id}`
+                                  : 'Pengajuan ini sudah diproses'
+                              }
+                              className="size-3.5 cursor-pointer accent-[#0f766e] disabled:cursor-not-allowed disabled:opacity-40"
                             />
                           </td>
                           <td className="whitespace-nowrap px-2 py-3">

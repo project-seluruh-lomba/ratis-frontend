@@ -18,12 +18,19 @@ import OwnerFinancePage from './pages/owner/OwnerFinancePage'
 import OwnerLoginPage from './pages/owner/OwnerLoginPage'
 import OwnerOrderDetailPage from './pages/owner/OwnerOrderDetailPage'
 import OwnerOrderListPage from './pages/owner/OwnerOrderListPage'
+import OwnerPosPage from './pages/owner/OwnerPosPage'
 import OwnerPlaceholderPage from './pages/owner/OwnerPlaceholderPage'
 import OwnerProductDetailPage from './pages/owner/OwnerProductDetailPage'
 import OwnerProductFormPage from './pages/owner/OwnerProductFormPage'
 import OwnerProductStockPage from './pages/owner/OwnerProductStockPage'
+import OwnerReportPage from './pages/owner/OwnerReportPage'
 import OwnerRegisterPage from './pages/owner/OwnerRegisterPage'
 import OwnerStorefrontPreviewPage from './pages/owner/OwnerStorefrontPreviewPage'
+import KelolaStafPage from './pages/owner/KelolaStafPage'
+import OwnerStaffDetailPage from './pages/owner/OwnerStaffDetailPage'
+import OwnerStaffEditPage from './pages/owner/OwnerStaffEditPage'
+import OwnerStoreProfilePage from './pages/owner/OwnerStoreProfilePage'
+import OwnerStoreEditPage from './pages/owner/OwnerStoreEditPage'
 import OwnerLayout from './components/owner/OwnerLayout'
 
 export default function App() {
@@ -36,13 +43,27 @@ export default function App() {
         <Route path="/owner" element={<Navigate to="/owner/dashboard" replace />} />
         <Route path="/owner/dashboard" element={<OwnerDashboardPage />} />
         <Route path="/owner/pesanan" element={<OwnerOrderListPage />} />
+        <Route path="/owner/pesanan/baru" element={<OwnerPosPage />} />
         <Route path="/owner/pesanan/:id" element={<OwnerOrderDetailPage />} />
         <Route path="/owner/keuangan" element={<OwnerFinancePage />} />
+        <Route path="/owner/laporan-keuangan" element={<OwnerReportPage />} />
+        <Route path="/owner/laporan" element={<OwnerReportPage />} />
         <Route path="/owner/produk" element={<OwnerProductStockPage />} />
         <Route path="/owner/produk/baru" element={<OwnerProductFormPage />} />
         <Route path="/owner/produk/:id" element={<OwnerProductDetailPage />} />
         <Route path="/owner/produk-stok" element={<OwnerProductStockPage />} />
         <Route path="/owner/pratinjau" element={<OwnerStorefrontPreviewPage />} />
+        <Route path="/owner/toko" element={<OwnerStoreProfilePage />} />
+        <Route path="/owner/toko/ubah" element={<OwnerStoreEditPage />} />
+        <Route path="/owner/kelola-staf" element={<KelolaStafPage />} />
+        <Route
+          path="/owner/kelola-staf/detail-staf/:id"
+          element={<OwnerStaffDetailPage />}
+        />
+        <Route
+          path="/owner/kelola-staf/detail-staf/:id/ubah"
+          element={<OwnerStaffEditPage />}
+        />
         <Route path="/owner/*" element={<OwnerPlaceholderPage />} />
       </Route>
       <Route path="/admin-login" element={<AdminLoginPage />} />

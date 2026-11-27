@@ -38,8 +38,8 @@ const navigation = [
   { label: 'Pesanan', to: '/owner/pesanan', icon: ShoppingBag, badge: '3 Baru' },
   { label: 'Produk & Stok', to: '/owner/produk', icon: Package },
   { label: 'Keuangan', to: '/owner/keuangan', icon: Wallet },
-  { label: 'Staf Toko', to: '/owner/staf', icon: Users },
-  { label: 'Laporan & Ekspor', to: '/owner/laporan', icon: BarChart3 },
+  { label: 'Staf Toko', to: '/owner/kelola-staf', icon: Users },
+  { label: 'Laporan & Ekspor', to: '/owner/laporan-keuangan', icon: BarChart3 },
 ]
 
 const secondaryNavigation = [
@@ -54,7 +54,10 @@ const pageTitles: Record<string, string> = {
   produk: 'Produk & Stok',
   keuangan: 'Keuangan',
   staf: 'Staf Toko',
+  'kelola-staf': 'Staf Toko',
+  kelolaStaf: 'Kelola Staf',
   laporan: 'Laporan & Ekspor',
+  'laporan-keuangan': 'Laporan & Ekspor',
   toko: 'Profil Toko',
   notifikasi: 'Notifikasi',
   bantuan: 'Pusat Bantuan',
@@ -256,7 +259,7 @@ function MobileBottomNav({ onMenuClick }: { onMenuClick: () => void }) {
 export default function OwnerLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [session] = useState(getOwnerSession)
+  const session = getOwnerSession()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [bellOpen, setBellOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)

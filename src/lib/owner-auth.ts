@@ -129,6 +129,18 @@ export function saveOwnerSession(session: OwnerSession, remember: boolean) {
   storage.setItem(SESSION_KEY, JSON.stringify(session))
 }
 
+export function updateOwnerStoreName(storeName: string) {
+  for (const storage of [localStorage, sessionStorage]) {
+    const raw = storage.getItem(SESSION_KEY)
+    if (!raw) continue
+
+    const session = parseSession(raw)
+    if (!session) continue
+
+    storage.setItem(SESSION_KEY, JSON.stringify({ ...session, storeName }))
+  }
+}
+
 export function clearOwnerSession() {
   localStorage.removeItem(SESSION_KEY)
   sessionStorage.removeItem(SESSION_KEY)

@@ -34,7 +34,9 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import CancelOrderModal from '../../components/owner/CancelOrderModal'
+import CancelOrderModal, {
+  type CancelOrderResult,
+} from '../../components/owner/CancelOrderModal'
 import { getOwnerSession } from '../../lib/owner-auth'
 import {
   addOwnerOrder,
@@ -50,7 +52,11 @@ import {
   type OwnerOrderItem,
   type OwnerOrderStatus,
 } from '../../lib/owner-order-data'
-import { getOwnerProducts, type OwnerProduct } from '../../lib/owner-product-data'
+import {
+  getOwnerProducts,
+  restoreProductStock,
+  type OwnerProduct,
+} from '../../lib/owner-product-data'
 
 type StatusFilter = 'semua' | OwnerOrderStatus
 type ToastTone = 'success' | 'info' | 'danger'
@@ -551,13 +557,21 @@ export default function OwnerOrderListPage() {
     setCancelTarget(order)
   }
 
-  function handleCancelOrder(reason: string) {
+  function handleCancelOrder({ reason, notifyWhatsApp }: CancelOrderResult) {
     if (!cancelTarget) return
+    restoreProductStock(cancelTarget.items)
     updateStatus(cancelTarget, 'dibatalkan', {
       cancelReason: reason,
       paymentStatus: 'batal',
     })
-    showToast(`Pesanan ${cancelTarget.code} dibatalkan.`, 'info')
+    showToast(
+      `Pesanan ${cancelTarget.code} dibatalkan. Stok sudah dikembalikan.${
+        notifyWhatsApp
+          ? ` Notifikasi WhatsApp dikirim ke ${cancelTarget.customerName}.`
+          : ''
+      }`,
+      'info',
+    )
     setCancelTarget(null)
   }
 
@@ -753,7 +767,7 @@ export default function OwnerOrderListPage() {
           </button>
           <button
             type="button"
-            onClick={() => setManualOpen(true)}
+            onClick={() => navigate('/owner/pesanan/baru')}
             className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[11.5px] font-semibold text-white shadow-sm transition hover:bg-primary-hover sm:flex-none"
           >
             <Plus className="size-4" />

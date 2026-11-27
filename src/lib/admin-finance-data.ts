@@ -1,4 +1,6 @@
-export type PayoutStatus = 'menunggu' | 'diverifikasi' | 'berhasil' | 'terkirim'
+import type { PayoutRecord, PayoutStatus } from './api/types'
+
+export type { PayoutRecord, PayoutStatus }
 
 export type FinanceDay = {
   date: string
@@ -7,19 +9,6 @@ export type FinanceDay = {
   disbursed: number
   commission: number
   orders: number
-}
-
-export type PayoutRecord = {
-  id: string
-  storeName: string
-  owner: string
-  bank: string
-  account: string
-  method: string
-  netAmount: number
-  commission: number
-  submittedAt: string
-  status: PayoutStatus
 }
 
 export type CommissionTier = {

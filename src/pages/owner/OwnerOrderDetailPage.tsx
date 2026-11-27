@@ -25,7 +25,12 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import CancelOrderModal from '../../components/owner/CancelOrderModal'
+import CancelOrderModal, {
+  type CancelOrderResult,
+} from '../../components/owner/CancelOrderModal'
+import OrderConfirmModal, {
+  type OrderConfirmResult,
+} from '../../components/owner/OrderConfirmModal'
 import { getOwnerSession } from '../../lib/owner-auth'
 import {
   getOwnerOrders,
@@ -38,7 +43,11 @@ import {
   type OwnerOrder,
   type OwnerOrderFulfillment,
 } from '../../lib/owner-order-data'
-import { getOwnerProducts, type OwnerProduct } from '../../lib/owner-product-data'
+import {
+  getOwnerProducts,
+  restoreProductStock,
+  type OwnerProduct,
+} from '../../lib/owner-product-data'
 
 type ToastTone = 'success' | 'info' | 'danger'
 type Toast = { message: string; tone: ToastTone }
@@ -391,6 +400,7 @@ export default function OwnerOrderDetailPage() {
     () => getOwnerOrders().find((item) => item.id === id) ?? null,
   )
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [confirmMode, setConfirmMode] = useState<'process' | 'complete' | null>(null)
   const [proofOpen, setProofOpen] = useState(false)
   const [toast, setToast] = useState<Toast | null>(null)
 
@@ -485,24 +495,39 @@ export default function OwnerOrderDetailPage() {
             ? 'Pesanan selesai dan bersifat final. Tidak ada tindakan lanjutan yang diperlukan.'
             : 'Pesanan dibatalkan dan bersifat final. Hubungi tim Ratis jika perlu bantuan.'
 
-  function handleProcess() {
+  function handleConfirmProcess({ notifyWhatsApp }: OrderConfirmResult) {
     if (!order) return
     const next: OwnerOrder = { ...order, status: 'diproses' }
     updateOwnerOrder(next)
     setOrder(next)
-    showToast(`Pesanan ${order.code} mulai diproses.`)
+    setConfirmMode(null)
+    showToast(
+      `Pesanan ${order.code} mulai diproses.${
+        notifyWhatsApp
+          ? ` Notifikasi WhatsApp dikirim ke ${order.customerName}.`
+          : ''
+      }`,
+    )
   }
 
-  function handleComplete() {
+  function handleConfirmComplete({ notifyWhatsApp }: OrderConfirmResult) {
     if (!order) return
     const next: OwnerOrder = { ...order, status: 'selesai' }
     updateOwnerOrder(next)
     setOrder(next)
-    showToast(`Pesanan ${order.code} ditandai selesai.`)
+    setConfirmMode(null)
+    showToast(
+      `Pesanan ${order.code} selesai. Pemasukan sudah tercatat otomatis.${
+        notifyWhatsApp
+          ? ` Notifikasi WhatsApp dikirim ke ${order.customerName}.`
+          : ''
+      }`,
+    )
   }
 
-  function handleCancel(reason: string) {
+  function handleCancel({ reason, notifyWhatsApp }: CancelOrderResult) {
     if (!order) return
+    restoreProductStock(order.items)
     const next: OwnerOrder = {
       ...order,
       status: 'dibatalkan',
@@ -512,7 +537,14 @@ export default function OwnerOrderDetailPage() {
     updateOwnerOrder(next)
     setOrder(next)
     setCancelOpen(false)
-    showToast(`Pesanan ${order.code} dibatalkan.`, 'info')
+    showToast(
+      `Pesanan ${order.code} dibatalkan. Stok sudah dikembalikan.${
+        notifyWhatsApp
+          ? ` Notifikasi WhatsApp dikirim ke ${order.customerName}.`
+          : ''
+      }`,
+      'info',
+    )
   }
 
   async function handleCopyInfo() {
@@ -1096,7 +1128,7 @@ export default function OwnerOrderDetailPage() {
               <>
                 <button
                   type="button"
-                  onClick={handleProcess}
+                  onClick={() => setConfirmMode('process')}
                   className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[11.5px] font-semibold text-white shadow-sm transition hover:bg-primary-hover"
                 >
                   <CheckCircle2 className="size-4" />
@@ -1113,7 +1145,7 @@ export default function OwnerOrderDetailPage() {
               <>
                 <button
                   type="button"
-                  onClick={handleComplete}
+                  onClick={() => setConfirmMode('complete')}
                   className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[11.5px] font-semibold text-white shadow-sm transition hover:bg-primary-hover"
                 >
                   <CheckCircle2 className="size-4" />
@@ -1129,7 +1161,7 @@ export default function OwnerOrderDetailPage() {
             {order.status === 'selesai' && (
               <div className="mt-3 flex items-start gap-2 rounded-xl border border-[#cfe8e3] bg-[#eef9f6] p-3 text-[10.5px] leading-relaxed text-primary">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-                Pesanan sudah selesai. Pembayaran dilakukan di luar sistem.
+                Pesanan sudah selesai. Pemasukan sudah tercatat otomatis di buku kas.
               </div>
             )}
 
@@ -1304,6 +1336,19 @@ export default function OwnerOrderDetailPage() {
           order={order}
           onClose={() => setCancelOpen(false)}
           onConfirm={handleCancel}
+        />
+      )}
+
+      {confirmMode && (
+        <OrderConfirmModal
+          order={order}
+          mode={confirmMode}
+          onClose={() => setConfirmMode(null)}
+          onConfirm={
+            confirmMode === 'process'
+              ? handleConfirmProcess
+              : handleConfirmComplete
+          }
         />
       )}
 

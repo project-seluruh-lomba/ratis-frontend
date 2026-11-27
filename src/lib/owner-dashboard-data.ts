@@ -222,7 +222,7 @@ export const ownerNotifications: OwnerNotification[] = [
     title: 'Target omzet tercapai',
     message: '70% target bulan ini sudah tercapai',
     time: '3 jam lalu',
-    to: '/owner/laporan',
+    to: '/owner/laporan-keuangan',
   },
   {
     id: 'notif-005',

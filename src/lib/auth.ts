@@ -1,6 +1,6 @@
 ﻿import { authApi } from './api/services'
 
-export type AdminRole = 'SUPERADMIN' | 'VERIFIKATOR' | 'ADMIN'
+export type AdminRole = 'ADMIN'
 
 export type AdminSession = {
   email: string
@@ -14,6 +14,7 @@ export type AdminSession = {
 export type AuthErrorCode =
   | 'invalid-credentials'
   | 'account-disabled'
+  | 'forbidden'
   | 'rate-limited'
   | 'email-taken'
   | 'network'
@@ -36,11 +37,12 @@ function parseSession(raw: string | null): AdminSession | null {
   try {
     const parsed = JSON.parse(raw) as Partial<AdminSession>
     if (typeof parsed.email !== 'string' || typeof parsed.name !== 'string' || typeof parsed.token !== 'string') return null
+    if (parsed.role !== 'ADMIN') return null
     return {
       id: typeof parsed.id === 'string' ? parsed.id : '',
       email: parsed.email,
       name: parsed.name,
-      role: (parsed.role as AdminRole) || 'ADMIN',
+      role: 'ADMIN',
       loginAt: typeof parsed.loginAt === 'string' ? parsed.loginAt : new Date().toISOString(),
       token: parsed.token,
     }
@@ -76,11 +78,14 @@ export function clearAdminSession() {
 export async function loginAdmin({ email, password }: { email: string; password: string }): Promise<AdminSession> {
   try {
     const data = await authApi.login({ email, password })
+    if (data.user.role !== 'ADMIN') {
+      throw new AuthError('forbidden', 'Akses ditolak. Halaman ini khusus akun admin.')
+    }
     return {
       id: data.user.id,
       email: data.user.email,
       name: data.user.name,
-      role: (data.user.role as AdminRole) || 'ADMIN',
+      role: 'ADMIN',
       loginAt: new Date().toISOString(),
       token: data.accessToken,
     }
@@ -89,6 +94,7 @@ export async function loginAdmin({ email, password }: { email: string; password:
     const msg = err?.userMessage || err?.response?.data?.message || 'Gagal masuk'
     if (status === 401) throw new AuthError('invalid-credentials', msg)
     if (status === 403) throw new AuthError('account-disabled', msg)
+    if (err instanceof AuthError) throw err
     if (status === 429) throw new AuthError('rate-limited', msg)
     throw new AuthError('unknown', msg)
   }

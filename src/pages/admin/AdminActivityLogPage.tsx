@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Calendar,
   ChevronLeft,
@@ -15,17 +16,45 @@ import {
   Zap,
 } from 'lucide-react'
 import AdminToast, { type ToastTone } from '../../components/admin/AdminToast'
-import {
-  activityCategories,
-  activityEntries,
-  activityLedger,
-  type ActivityActionTone,
-  type ActivityActorTone,
-  type ActivityCategory,
-  type ActivityEntry,
-} from '../../lib/admin-activity-log-data'
+import type { ApiError } from '../../lib/api/client'
+import { logsApi } from '../../lib/api/services'
+import type { AdminLogEntry, LogSummary } from '../../lib/api/types'
 
 type Period = 'today' | '7d' | '30d' | 'all'
+
+type ActivityActionTone =
+  | 'emerald'
+  | 'violet'
+  | 'rose'
+  | 'indigo'
+  | 'amber'
+  | 'teal'
+  | 'slate'
+
+type ActivityActorTone = 'emerald' | 'indigo' | 'teal' | 'rose' | 'slate'
+
+type ActivityCategory =
+  | 'Verifikasi UMKM'
+  | 'Status UMKM'
+  | 'Kategori'
+  | 'Pengguna'
+  | 'Autentikasi'
+  | 'Payout'
+
+type ActivityEntry = {
+  id: string
+  at: string
+  actor: { name: string; email: string; initials: string; tone: ActivityActorTone }
+  action: string
+  tone: ActivityActionTone
+  category: ActivityCategory
+  objectName: string
+  objectMeta: string
+  objectHref: string | null
+  description: string
+  reference: string
+  referenceTone: string
+}
 
 const PAGE_SIZE = 8
 
@@ -43,6 +72,13 @@ const timeFormatter = new Intl.DateTimeFormat('en-GB', {
   minute: '2-digit',
   second: '2-digit',
   hourCycle: 'h23',
+  timeZone: 'Asia/Jakarta',
+})
+
+const dayKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
   timeZone: 'Asia/Jakarta',
 })
 
@@ -64,11 +100,148 @@ const actorStyles: Record<ActivityActorTone, string> = {
   slate: 'bg-slate-400 text-white',
 }
 
+const actorTones: ActivityActorTone[] = ['emerald', 'indigo', 'teal', 'rose', 'slate']
+
 const periodLabels: Record<Period, string> = {
   today: 'Hari Ini',
   '7d': '7 Hari Terakhir',
   '30d': '30 Hari Terakhir',
   all: 'Semua Waktu',
+}
+
+const activityCategories: ActivityCategory[] = [
+  'Verifikasi UMKM',
+  'Status UMKM',
+  'Kategori',
+  'Pengguna',
+  'Autentikasi',
+  'Payout',
+]
+
+const actionPresentation: Record<
+  string,
+  {
+    category: ActivityCategory
+    tone: ActivityActionTone
+    referenceTone: string
+    description: (name: string) => string
+  }
+> = {
+  LOGIN: {
+    category: 'Autentikasi',
+    tone: 'indigo',
+    referenceTone: 'text-indigo-500',
+    description: () => 'Sesi login berhasil pada konsol admin Ratis.',
+  },
+  APPROVE_SHOP: {
+    category: 'Verifikasi UMKM',
+    tone: 'emerald',
+    referenceTone: 'text-emerald-600',
+    description: (name) => `Menyetujui pendaftaran UMKM ${name}.`,
+  },
+  REJECT_SHOP: {
+    category: 'Verifikasi UMKM',
+    tone: 'amber',
+    referenceTone: 'text-slate-400',
+    description: (name) => `Menolak pengajuan pendaftaran UMKM ${name}.`,
+  },
+  ACTIVATE_SHOP: {
+    category: 'Status UMKM',
+    tone: 'emerald',
+    referenceTone: 'text-emerald-600',
+    description: (name) => `Mengaktifkan kembali UMKM ${name}.`,
+  },
+  DEACTIVATE_SHOP: {
+    category: 'Status UMKM',
+    tone: 'rose',
+    referenceTone: 'text-rose-500',
+    description: (name) => `Menonaktifkan UMKM ${name}.`,
+  },
+  CREATE_CATEGORY: {
+    category: 'Kategori',
+    tone: 'violet',
+    referenceTone: 'text-indigo-500',
+    description: (name) => `Menambahkan kategori baru ${name}.`,
+  },
+  UPDATE_CATEGORY: {
+    category: 'Kategori',
+    tone: 'violet',
+    referenceTone: 'text-indigo-500',
+    description: (name) => `Memperbarui data kategori ${name}.`,
+  },
+  DELETE_CATEGORY: {
+    category: 'Kategori',
+    tone: 'rose',
+    referenceTone: 'text-rose-500',
+    description: (name) => `Menghapus kategori ${name}.`,
+  },
+  ACTIVATE_USER: {
+    category: 'Pengguna',
+    tone: 'emerald',
+    referenceTone: 'text-emerald-600',
+    description: (name) => `Mengaktifkan kembali akun ${name}.`,
+  },
+  DEACTIVATE_USER: {
+    category: 'Pengguna',
+    tone: 'rose',
+    referenceTone: 'text-rose-500',
+    description: (name) => `Menonaktifkan akun ${name}.`,
+  },
+  PROCESS_PAYOUT_BATCH: {
+    category: 'Payout',
+    tone: 'teal',
+    referenceTone: 'text-teal-600',
+    description: () => 'Memproses batch pencairan dana UMKM.',
+  },
+}
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+}
+
+function actorToneFor(name: string) {
+  const seed = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return actorTones[seed % actorTones.length]
+}
+
+function mapEntry(entry: AdminLogEntry): ActivityEntry {
+  const presentation = actionPresentation[entry.action] ?? {
+    category: 'Autentikasi' as ActivityCategory,
+    tone: 'slate' as ActivityActionTone,
+    referenceTone: 'text-slate-400',
+    description: () => `Aksi ${entry.action} dijalankan.`,
+  }
+  const objectName = entry.targetName ?? entry.targetId
+
+  return {
+    id: entry.id,
+    at: entry.createdAt,
+    actor: {
+      name: entry.admin.name,
+      email: entry.admin.email,
+      initials: getInitials(entry.admin.name),
+      tone: actorToneFor(entry.admin.name),
+    },
+    action: entry.action,
+    tone: presentation.tone,
+    category: presentation.category,
+    objectName,
+    objectMeta: entry.targetMeta ?? `Entitas: ${entry.targetType}`,
+    objectHref:
+      entry.targetType === 'SHOP'
+        ? `/admin/umkm/${entry.targetId}`
+        : entry.targetType === 'USER'
+          ? `/admin/pengguna?q=${encodeURIComponent(objectName)}`
+          : null,
+    description: presentation.description(objectName),
+    reference: entry.reason ? `Alasan: ${entry.reason}` : '',
+    referenceTone: presentation.referenceTone,
+  }
 }
 
 function formatStamp(entry: ActivityEntry) {
@@ -79,16 +252,17 @@ function formatStamp(entry: ActivityEntry) {
   }
 }
 
-function isWithinPeriod(entry: ActivityEntry, period: Period) {
-  if (period === 'all') return true
-  const days = period === 'today' ? 1 : period === '7d' ? 7 : 30
-  const start = new Date()
-  if (period === 'today') {
-    start.setHours(0, 0, 0, 0)
-  } else {
-    start.setDate(start.getDate() - days)
-  }
-  return new Date(entry.at).getTime() >= start.getTime()
+function wibDayKey(offsetDays: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  return dayKeyFormatter.format(date)
+}
+
+function periodRange(period: Period) {
+  if (period === 'all') return {}
+  if (period === 'today') return { from: wibDayKey(0), to: wibDayKey(0) }
+  if (period === '7d') return { from: wibDayKey(-6), to: wibDayKey(0) }
+  return { from: wibDayKey(-29), to: wibDayKey(0) }
 }
 
 function escapeCsv(value: string) {
@@ -100,52 +274,66 @@ export default function AdminActivityLogPage() {
   const [category, setCategory] = useState<'all' | ActivityCategory>('all')
   const [period, setPeriod] = useState<Period>('7d')
   const [page, setPage] = useState(1)
+  const [entries, setEntries] = useState<ActivityEntry[]>([])
+  const [summary, setSummary] = useState<LogSummary | null>(null)
+  const [totalEntries, setTotalEntries] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [syncedAt, setSyncedAt] = useState(() => new Date())
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null)
+
+  const range = useMemo(() => periodRange(period), [period])
 
   function showToast(message: string, tone: ToastTone = 'success') {
     setToast({ message, tone })
     window.setTimeout(() => setToast(null), 4200)
   }
 
-  const keyword = query.trim().toLowerCase()
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      logsApi
+        .list({
+          ...(category !== 'all' ? { category } : {}),
+          ...(range.from ? { from: range.from } : {}),
+          ...(range.to ? { to: range.to } : {}),
+          ...(query.trim() ? { q: query.trim() } : {}),
+          page,
+          limit: PAGE_SIZE,
+        })
+        .then((response) => {
+          if (cancelled) return
+          setEntries(response.data.map(mapEntry))
+          setSummary(response.summary)
+          setTotalEntries(response.meta.total)
+          setSyncedAt(new Date())
+        })
+        .catch((err: ApiError) => {
+          if (!cancelled) setError(err.userMessage ?? 'Gagal memuat log aktivitas')
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [category, range, query, page, refreshKey])
 
-  const filteredEntries = useMemo(() => {
-    return activityEntries.filter((entry) => {
-      const matchesKeyword =
-        keyword.length === 0 ||
-        entry.actor.name.toLowerCase().includes(keyword) ||
-        entry.actor.ip.includes(keyword) ||
-        entry.action.toLowerCase().includes(keyword) ||
-        entry.objectName.toLowerCase().includes(keyword) ||
-        entry.objectMeta.toLowerCase().includes(keyword) ||
-        entry.description.toLowerCase().includes(keyword) ||
-        entry.reference.toLowerCase().includes(keyword) ||
-        entry.id.toLowerCase().includes(keyword)
-      const matchesCategory = category === 'all' || entry.category === category
-      return matchesKeyword && matchesCategory && isWithinPeriod(entry, period)
-    })
-  }, [keyword, category, period])
-
-  const pageCount = Math.max(1, Math.ceil(filteredEntries.length / PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(totalEntries / PAGE_SIZE))
   const safePage = Math.min(page, pageCount)
-  const startIndex = filteredEntries.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
-  const endIndex = Math.min(safePage * PAGE_SIZE, filteredEntries.length)
-  const visibleEntries = filteredEntries.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  )
-
-  const todayEntries = activityEntries.filter((entry) => isWithinPeriod(entry, 'today'))
-  const todayCount = todayEntries.length
-  const todayActors = new Set(todayEntries.map((entry) => entry.actor.name)).size
+  const startIndex = totalEntries === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1
+  const endIndex = Math.min(safePage * PAGE_SIZE, totalEntries)
 
   const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1).filter(
-    (number) =>
-      number === 1 || number === pageCount || Math.abs(number - safePage) <= 1,
+    (number) => number === 1 || number === pageCount || Math.abs(number - safePage) <= 1,
   )
 
-  const filtersActive = keyword.length > 0 || category !== 'all' || period !== '7d'
+  const filtersActive = query.trim().length > 0 || category !== 'all' || period !== '7d'
 
   function resetFilters() {
     setQuery('')
@@ -159,51 +347,63 @@ export default function AdminActivityLogPage() {
     setPage(1)
   }
 
-  function handleExport() {
-    const header = [
-      'ID Log',
-      'Waktu (WIB)',
-      'Admin',
-      'IP',
-      'Aksi',
-      'Kategori Aksi',
-      'Objek Sasaran',
-      'Deskripsi',
-      'Dasar Perubahan',
-    ]
-    const rows = filteredEntries.map((entry) => {
-      const stamp = formatStamp(entry)
-      return [
-        entry.id,
-        `${stamp.date} ${stamp.time}`,
-        entry.actor.name,
-        entry.actor.ip,
-        entry.action,
-        entry.category,
-        `${entry.objectName} (${entry.objectMeta})`,
-        entry.description,
-        entry.reference,
-      ]
-    })
-    const csv = [header, ...rows]
-      .map((row) => row.map(escapeCsv).join(','))
-      .join('\r\n')
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `log-aktivitas-admin-${new Date().toISOString().slice(0, 10)}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
-    showToast(`${numberFormatter.format(filteredEntries.length)} entri audit diekspor ke berkas CSV.`)
+  function refresh() {
+    setRefreshKey((value) => value + 1)
+    showToast('Memuat ulang catatan audit terbaru…', 'info')
   }
 
-  function handleRefresh() {
-    setSyncedAt(new Date())
-    setPage(1)
-    showToast(
-      `Ledger audit tersinkron. ${numberFormatter.format(activityEntries.length)} catatan terverifikasi.`,
-    )
+  async function handleExport() {
+    try {
+      const response = await logsApi.list({
+        ...(category !== 'all' ? { category } : {}),
+        ...(range.from ? { from: range.from } : {}),
+        ...(range.to ? { to: range.to } : {}),
+        ...(query.trim() ? { q: query.trim() } : {}),
+        page: 1,
+        limit: 50,
+      })
+      const header = [
+        'ID Log',
+        'Waktu (WIB)',
+        'Admin',
+        'Email',
+        'Aksi',
+        'Kategori Aksi',
+        'Objek Sasaran',
+        'Deskripsi',
+        'Dasar Perubahan',
+      ]
+      const rows = response.data.map((log) => {
+        const entry = mapEntry(log)
+        const stamp = formatStamp(entry)
+        return [
+          entry.id,
+          `${stamp.date} ${stamp.time}`,
+          entry.actor.name,
+          entry.actor.email,
+          entry.action,
+          entry.category,
+          `${entry.objectName} (${entry.objectMeta})`,
+          entry.description,
+          entry.reference,
+        ]
+      })
+      const csv = [header, ...rows]
+        .map((row) => row.map(escapeCsv).join(','))
+        .join('\r\n')
+      const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `log-aktivitas-admin-${new Date().toISOString().slice(0, 10)}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+      showToast(
+        `${numberFormatter.format(response.meta.total)} entri audit diekspor ke berkas CSV.`,
+      )
+    } catch (err) {
+      showToast((err as ApiError).userMessage ?? 'Gagal mengekspor log audit.', 'error')
+    }
   }
 
   return (
@@ -219,26 +419,21 @@ export default function AdminActivityLogPage() {
               <span className="size-1.5 rounded-full bg-primary" />
               Audit &amp; Kepatuhan
             </span>
-            <span className="text-slate-300">•</span>
-            <span className="font-mono text-[9px] font-semibold normal-case tracking-normal text-slate-500">
-              Ledger ID {activityLedger.ledgerId}
-            </span>
           </div>
 
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-ink sm:text-[30px]">
             Log Aktivitas Admin
           </h1>
           <p className="mt-1.5 max-w-2xl text-[10px] leading-relaxed text-muted">
-            Catatan rekam jejak digital tindakan administratif yang tidak dapat diubah
-            (<span className="italic">immutable</span>) secara kriptografis untuk menjaga
-            akuntabilitas, transparansi tata kelola, dan kepatuhan regulasi data UMKM.
+            Catatan rekam jejak tindakan administratif untuk menjaga akuntabilitas dan transparansi
+            tata kelola platform.
           </p>
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-emerald-700 shadow-sm">
             <ShieldCheck className="size-3.5 text-emerald-600" />
-            Audit Trail Terverifikasi
+            Log Audit Aktif
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eef0fa] px-3 py-1.5 text-[10px] font-semibold text-slate-600">
             <Lock className="size-3.5" />
@@ -251,15 +446,15 @@ export default function AdminActivityLogPage() {
         <article className="flex items-start justify-between gap-3 rounded-2xl border border-line bg-white p-4 shadow-sm">
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted">
-              Total Catatan Tersip
+              Total Catatan Tersimpan
             </p>
             <p className="mt-1 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold tracking-tight text-ink">
-                {numberFormatter.format(activityEntries.length)}
+                {numberFormatter.format(summary?.total ?? 0)}
               </span>
               <span className="text-[10px] font-medium text-muted">entri</span>
             </p>
-            <p className="mt-0.5 text-[9px] text-slate-400">{activityLedger.retentionLabel}</p>
+            <p className="mt-0.5 text-[9px] text-slate-400">Tersimpan di database platform</p>
           </div>
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef1fb] text-indigo-500">
             <Database className="size-4.5" />
@@ -273,14 +468,12 @@ export default function AdminActivityLogPage() {
             </p>
             <p className="mt-1 flex items-baseline gap-1.5">
               <span className="text-3xl font-extrabold tracking-tight text-ink">
-                {numberFormatter.format(todayCount)}
+                {numberFormatter.format(summary?.todayCount ?? 0)}
               </span>
-              <span className="text-[9px] font-semibold text-emerald-600">
-                +12% vs rata-rata harian
-              </span>
+              <span className="text-[9px] font-semibold text-emerald-600">WIB</span>
             </p>
             <p className="mt-0.5 text-[9px] text-slate-400">
-              Dari {todayActors} staf administratif aktif
+              Dari {summary?.todayAdmins ?? 0} admin aktif
             </p>
           </div>
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e7f7f4] text-teal-600">
@@ -291,17 +484,15 @@ export default function AdminActivityLogPage() {
         <article className="flex items-start justify-between gap-3 rounded-2xl border border-line bg-white p-4 shadow-sm">
           <div className="min-w-0">
             <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-muted">
-              Insiden &amp; Kejangkalan Kritis
+              Admin Pelaku Hari Ini
             </p>
             <p className="mt-1 flex items-center gap-2">
               <span className="text-3xl font-extrabold tracking-tight text-ink">
-                {activityLedger.criticalIncidents}
+                {numberFormatter.format(summary?.todayAdmins ?? 0)}
               </span>
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
-                100% Aman
-              </span>
+              <span className="text-[9px] font-semibold text-slate-500">admin</span>
             </p>
-            <p className="mt-0.5 text-[9px] text-slate-400">Zero unhandled permission bypass</p>
+            <p className="mt-0.5 text-[9px] text-slate-400">Tercatat pada log hari ini</p>
           </div>
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#eef1fb] text-indigo-500">
             <ShieldCheck className="size-4.5" />
@@ -320,7 +511,7 @@ export default function AdminActivityLogPage() {
                 setQuery(event.target.value)
                 setPage(1)
               }}
-              placeholder="Cari nama admin, IP, ID transaksi [#SF...]"
+              placeholder="Cari nama admin, ID target, atau alasan..."
               aria-label="Cari log aktivitas"
               className="h-9 w-full rounded-xl border border-line bg-[#f7f7fb] pl-9 pr-3 text-[10px] text-ink outline-none transition placeholder:text-slate-400 focus:border-primary focus:bg-white"
             />
@@ -366,10 +557,10 @@ export default function AdminActivityLogPage() {
 
           <button
             type="button"
-            onClick={handleRefresh}
+            onClick={refresh}
             className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-line bg-white px-3 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-50"
           >
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
             Segarkan
           </button>
         </div>
@@ -378,7 +569,7 @@ export default function AdminActivityLogPage() {
           <button
             type="button"
             onClick={handleExport}
-            disabled={filteredEntries.length === 0}
+            disabled={totalEntries === 0 || loading}
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#0b3b36] px-3.5 text-[10px] font-semibold text-white transition hover:bg-[#124b43] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="size-3.5" />
@@ -449,7 +640,32 @@ export default function AdminActivityLogPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {visibleEntries.length === 0 ? (
+              {loading && entries.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-14 text-center">
+                    <RefreshCw className="mx-auto size-5 animate-spin text-slate-400" />
+                    <p className="mt-2 text-[11px] font-semibold text-ink">Memuat log audit</p>
+                    <p className="mt-1 text-[9px] text-muted">
+                      Mengambil catatan aktivitas admin dari server.
+                    </p>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-14 text-center">
+                    <p className="text-[11px] font-semibold text-ink">Gagal memuat log audit</p>
+                    <p className="mt-1 text-[9px] text-muted">{error}</p>
+                    <button
+                      type="button"
+                      onClick={refresh}
+                      className="mt-3 inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 text-[9px] font-semibold text-white transition hover:bg-primary-hover"
+                    >
+                      <RefreshCw className="size-3" />
+                      Coba Lagi
+                    </button>
+                  </td>
+                </tr>
+              ) : entries.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-14 text-center">
                     <p className="text-[11px] font-semibold text-ink">
@@ -470,7 +686,7 @@ export default function AdminActivityLogPage() {
                   </td>
                 </tr>
               ) : (
-                visibleEntries.map((entry) => {
+                entries.map((entry) => {
                   const stamp = formatStamp(entry)
                   return (
                     <tr key={entry.id} className="align-top transition hover:bg-slate-50/70">
@@ -479,7 +695,7 @@ export default function AdminActivityLogPage() {
                           {stamp.date}, {stamp.time}
                         </p>
                         <p className="mt-1 font-mono text-[8px] text-slate-400">
-                          UTC+07:00 • Seq #{entry.seq}
+                          UTC+07:00 • ID #{entry.id.slice(-8)}
                         </p>
                       </td>
 
@@ -497,7 +713,7 @@ export default function AdminActivityLogPage() {
                               {entry.actor.name}
                             </p>
                             <p className="mt-0.5 whitespace-nowrap font-mono text-[8px] text-slate-400">
-                              IP: {entry.actor.ip}
+                              {entry.actor.email}
                             </p>
                           </div>
                         </div>
@@ -512,13 +728,23 @@ export default function AdminActivityLogPage() {
                           <span className="size-1.5 rounded-full bg-current opacity-70" />
                           {entry.action}
                         </span>
+                        <p className="mt-1 text-[8px] font-medium text-slate-400">
+                          {entry.category}
+                        </p>
                       </td>
 
                       <td className="px-4 py-3.5">
                         <p className="flex items-center gap-1 whitespace-nowrap text-[10px] font-semibold text-ink">
-                          {entry.objectName}
-                          {entry.showObjectLink && (
-                            <ExternalLink className="size-2.5 shrink-0 text-slate-400" />
+                          {entry.objectHref ? (
+                            <Link
+                              to={entry.objectHref}
+                              className="inline-flex items-center gap-1 transition hover:text-primary hover:underline"
+                            >
+                              {entry.objectName}
+                              <ExternalLink className="size-2.5 shrink-0 text-slate-400" />
+                            </Link>
+                          ) : (
+                            entry.objectName
                           )}
                         </p>
                         <p className="mt-0.5 max-w-[220px] truncate text-[8px] text-slate-400">
@@ -529,9 +755,11 @@ export default function AdminActivityLogPage() {
                       <td className="max-w-[360px] px-4 py-3.5">
                         <p className="text-[9px] leading-relaxed text-slate-600">
                           {entry.description}{' '}
-                          <span className={`font-semibold ${entry.referenceTone}`}>
-                            {entry.reference}
-                          </span>
+                          {entry.reference && (
+                            <span className={`font-semibold ${entry.referenceTone}`}>
+                              {entry.reference}
+                            </span>
+                          )}
                         </p>
                       </td>
                     </tr>
@@ -548,7 +776,7 @@ export default function AdminActivityLogPage() {
             <span className="font-semibold text-ink">
               {startIndex} - {endIndex}
             </span>{' '}
-            dari {numberFormatter.format(filteredEntries.length)} entri audit log
+            dari {numberFormatter.format(totalEntries)} entri audit log
           </p>
 
           <div className="flex items-center gap-1">
@@ -603,15 +831,15 @@ export default function AdminActivityLogPage() {
             <ShieldCheck className="size-4" />
           </span>
           <div className="min-w-0">
-            <p className="text-[10px] font-bold text-ink">Integritas Hash Kriptografi SHA-256</p>
-            <p className="mt-0.5 truncate font-mono text-[9px] text-slate-400">
-              Root Merkle State: {activityLedger.merkleRoot}
+            <p className="text-[10px] font-bold text-ink">Audit Trail Aktif</p>
+            <p className="mt-0.5 text-[9px] text-slate-400">
+              Setiap aksi admin tercatat otomatis beserta waktu, pelaksana, dan objek sasaran.
             </p>
           </div>
         </div>
         <p className="inline-flex shrink-0 items-center gap-1.5 text-[10px] font-semibold text-ink">
           <span className="size-1.5 rounded-full bg-emerald-500" />
-          Blok Audit Sinkron
+          Log Tersinkron
         </p>
       </section>
     </div>

@@ -13,14 +13,12 @@ import {
   Plus,
   Search,
   Trash2,
-  TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
 import AdminToast, { type ToastTone } from '../../components/admin/AdminToast'
 import ConfirmDialog from '../../components/admin/ConfirmDialog'
 import DeleteCategoryDialog from '../../components/admin/DeleteCategoryDialog'
 import {
-  categoryMonthlyGrowth,
   deleteCategory,
   fetchCategories,
   updateCategory,
@@ -205,22 +203,6 @@ export default function AdminCategoryPage() {
     }
   }
 
-  async function handleDeactivateFromDeleteDialog() {
-    if (!deleteTarget) return
-    try {
-      if (deleteTarget.status === 'aktif') await updateCategory(deleteTarget.id, { status: 'nonaktif' })
-      await load()
-      showToast(`Kategori ${deleteTarget.name} dinonaktifkan.`, 'info')
-      setDeleteTarget(null)
-    } catch (e: any) {
-      showToast(e?.userMessage || 'Gagal menonaktifkan kategori.', 'error')
-    }
-  }
-
-  function handleMigrateProducts(_replacementId: string) {
-    showToast('Migrasi produk antar kategori belum tersedia di backend.', 'info')
-  }
-
   async function handleDeleteCategory() {
     if (!deleteTarget || deleteTarget.productCount > 0) return
     try {
@@ -376,15 +358,7 @@ export default function AdminCategoryPage() {
           unit="SKU UMKM"
           icon={ClipboardList}
           iconClassName="bg-teal-50 text-primary"
-          footer={
-            <span className="flex items-center gap-1.5">
-              <TrendingUp className="size-3.5 text-emerald-600" />
-              <span>
-                <span className="font-bold text-emerald-600">+{categoryMonthlyGrowth}</span> produk
-                bulan ini
-              </span>
-            </span>
-          }
+          footer={<span>Dihitung dari seluruh produk UMKM</span>}
         />
       </section>
 
@@ -621,9 +595,14 @@ export default function AdminCategoryPage() {
                           <button
                             type="button"
                             onClick={() => setDeleteTarget(record)}
-                            title={`Hapus kategori ${record.name}`}
+                            disabled={record.productCount > 0}
+                            title={
+                              record.productCount > 0
+                                ? `Tidak dapat dihapus: dipakai ${record.productCount} produk. Nonaktifkan kategori ini.`
+                                : `Hapus kategori ${record.name}`
+                            }
                             aria-label={`Hapus kategori ${record.name}`}
-                            className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                            className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
                           >
                             <Trash2 className="size-3.5" />
                           </button>
@@ -710,10 +689,7 @@ export default function AdminCategoryPage() {
         <DeleteCategoryDialog
           open
           record={deleteTarget}
-          categories={records}
           onClose={() => setDeleteTarget(null)}
-          onDeactivate={handleDeactivateFromDeleteDialog}
-          onMigrate={handleMigrateProducts}
           onDelete={handleDeleteCategory}
         />
       )}

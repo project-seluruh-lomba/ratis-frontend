@@ -1,4 +1,8 @@
-import type { TrendPoint } from '../../lib/admin-dashboard-data'
+export type TrendPoint = {
+  label: string
+  omzet: number
+  orders: number
+}
 
 type TrendChartProps = {
   data: TrendPoint[]

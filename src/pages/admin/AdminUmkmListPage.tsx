@@ -229,7 +229,7 @@ export default function AdminUmkmListPage() {
           <span>Admin</span><span>/</span><span>Kelola UMKM</span><span>/</span><span className="text-primary">Daftar &amp; Verifikasi</span>
         </div>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-ink">Direktori Pendaftar UMKM</h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-muted">Kelola dan tinjau status legalitas operasional pedagang di ekosistem Ratis.</p>
+        <p className="mt-1.5 max-w-2xl text-sm text-muted">Kelola dan tinjau status operasional pedagang di ekosistem Ratis.</p>
       </div>
 
       <section className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

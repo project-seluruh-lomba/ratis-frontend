@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Activity,
@@ -20,15 +20,18 @@ import {
   User,
   X,
 } from 'lucide-react'
-import {
-  orderRecords,
-  orderShops,
-  type OrderRecord,
-  type OrderStatus,
-} from '../../lib/admin-order-data'
+import type { ApiError } from '../../lib/api/client'
+import { ordersApi, shopsApi } from '../../lib/api/services'
+import type {
+  AdminOrderDetail,
+  AdminOrderListItem,
+  AdminOrderSummary,
+  OrderStatus,
+  ShopListItem,
+} from '../../lib/api/types'
 
 type StatusFilter = OrderStatus | 'semua'
-type PeriodFilter = 'hari-ini' | '7-hari' | '30-hari'
+type PeriodFilter = 'hari-ini' | '7-hari' | '30-hari' | 'kustom'
 type SortOrder = 'terbaru' | 'terlama'
 
 const PAGE_SIZE = 10
@@ -56,6 +59,7 @@ const periodOptions: { value: PeriodFilter; label: string }[] = [
   { value: 'hari-ini', label: 'Hari Ini' },
   { value: '7-hari', label: '7 Hari Terakhir' },
   { value: '30-hari', label: '30 Hari Terakhir' },
+  { value: 'kustom', label: 'Kustom' },
 ]
 
 const rupiahFormatter = new Intl.NumberFormat('id-ID')
@@ -81,6 +85,12 @@ const timeFormatter = new Intl.DateTimeFormat('id-ID', {
   hour12: false,
   timeZone: 'Asia/Jakarta',
 })
+const dayKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: 'Asia/Jakarta',
+})
 
 function formatRupiah(value: number) {
   return `Rp ${rupiahFormatter.format(value)}`
@@ -102,75 +112,47 @@ function parseStatus(value: string | null): StatusFilter {
 }
 
 function parsePeriod(value: string | null): PeriodFilter {
-  if (value === 'hari-ini' || value === '7-hari' || value === '30-hari') return value
+  if (value === 'hari-ini' || value === '7-hari' || value === '30-hari' || value === 'kustom') {
+    return value
+  }
   return '30-hari'
 }
 
-function buildTimeline(order: OrderRecord) {
-  const created = new Date(order.createdAt).getTime()
-  const minutes = (amount: number) => new Date(created + amount * 60 * 1000).toISOString()
+function wibDayKey(offsetDays: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  return dayKeyFormatter.format(date)
+}
 
-  const events: {
-    title: string
-    description: string
-    at: string
-    tone: 'primary' | 'muted'
-  }[] = [
-    {
-      title: 'Pesanan Dibuat oleh Pelanggan',
-      description: 'Checkout aplikasi mobile Ratis UMKM',
-      at: order.createdAt,
-      tone: 'muted',
-    },
-  ]
+function periodRange(period: PeriodFilter) {
+  if (period === 'hari-ini') return { from: wibDayKey(0), to: wibDayKey(0) }
+  if (period === '7-hari') return { from: wibDayKey(-6), to: wibDayKey(0) }
+  return { from: wibDayKey(-29), to: wibDayKey(0) }
+}
 
-  if (order.status === 'pending') {
-    events.unshift({
-      title: 'Menunggu Pembayaran QRIS',
-      description: 'Pesanan belum dibayar dan masih menunggu konfirmasi kliring.',
-      at: minutes(2),
-      tone: 'primary',
-    })
-  } else if (order.status === 'dibatalkan') {
-    events.unshift({
-      title: 'Pesanan Dibatalkan',
-      description: 'Dibatalkan sebelum pesanan diproses oleh toko.',
-      at: minutes(9),
-      tone: 'muted',
-    })
-  } else {
-    events.unshift({
-      title: 'Pembayaran QRIS Berhasil',
-      description: 'Dana masuk ke rekening penampungan kliring pedagang.',
-      at: minutes(3),
-      tone: 'muted',
-    })
-    events.unshift({
-      title: 'Pesanan Sedang Disiapkan',
-      description: `${order.shopName} mengonfirmasi pesanan dan memulai peracikan menu.`,
-      at: minutes(5),
-      tone: 'primary',
-    })
-
-    if (order.status === 'selesai') {
-      events.unshift({
-        title: 'Pesanan Selesai',
-        description: 'Pesanan diterima pelanggan dan transaksi dinyatakan lunas.',
-        at: minutes(95),
-        tone: 'primary',
-      })
-    }
-  }
-
-  return events
+function statusHistoryTitle(status: OrderStatus) {
+  if (status === 'pending') return 'Pesanan Dibuat'
+  if (status === 'diproses') return 'Pesanan Diproses Toko'
+  if (status === 'selesai') return 'Pesanan Selesai'
+  return 'Pesanan Dibatalkan'
 }
 
 export default function AdminMonitoringOrderPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [syncedAt, setSyncedAt] = useState(() => new Date())
-  const [selectedCode, setSelectedCode] = useState<string | null>(
-    () => orderRecords[0]?.code ?? null,
-  )
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [orders, setOrders] = useState<AdminOrderListItem[]>([])
+  const [summary, setSummary] = useState<AdminOrderSummary | null>(null)
+  const [totalOrders, setTotalOrders] = useState(0)
+  const [shops, setShops] = useState<ShopListItem[]>([])
+  const [shopPickerOpen, setShopPickerOpen] = useState(false)
+  const [shopQuery, setShopQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [detail, setDetail] = useState<AdminOrderDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const statusFilter = parseStatus(searchParams.get('status'))
   const period = parsePeriod(searchParams.get('periode'))
@@ -178,6 +160,20 @@ export default function AdminMonitoringOrderPage() {
   const keyword = searchParams.get('q') ?? ''
   const sortOrder: SortOrder = searchParams.get('sort') === 'terlama' ? 'terlama' : 'terbaru'
   const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1)
+
+  const fromParam = searchParams.get('dari') ?? ''
+  const toParam = searchParams.get('sampai') ?? ''
+  const range = useMemo(
+    () =>
+      period === 'kustom'
+        ? { from: fromParam || wibDayKey(-29), to: toParam || wibDayKey(0) }
+        : periodRange(period),
+    [period, fromParam, toParam],
+  )
+  const selectedShop = shops.find((shop) => shop.id === shopFilter)
+  const filteredShops = shops.filter((shop) =>
+    shop.name.toLowerCase().includes(shopQuery.trim().toLowerCase()),
+  )
 
   function updateParam(key: string, value: string, defaultValue: string) {
     const next = new URLSearchParams(searchParams)
@@ -187,74 +183,106 @@ export default function AdminMonitoringOrderPage() {
     setSearchParams(next, { replace: true })
   }
 
-  const periodStart = useMemo(() => {
-    if (period === 'hari-ini') {
-      const start = new Date(syncedAt.getTime())
-      start.setHours(0, 0, 0, 0)
-      return start.getTime()
+  useEffect(() => {
+    let cancelled = false
+    shopsApi
+      .list({ limit: 50 })
+      .then((response) => {
+        if (!cancelled) setShops(response.data)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
     }
-    const days = period === '7-hari' ? 7 : 30
-    return syncedAt.getTime() - days * 24 * 60 * 60 * 1000
-  }, [period, syncedAt])
+  }, [])
 
-  const baseFiltered = useMemo(() => {
-    const search = keyword.trim().toLowerCase()
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      ordersApi
+        .list({
+          ...(statusFilter !== 'semua' ? { status: statusFilter } : {}),
+          ...(shopFilter !== 'semua' ? { shopId: shopFilter } : {}),
+          ...(range.from ? { from: range.from } : {}),
+          ...(range.to ? { to: range.to } : {}),
+          ...(keyword.trim() ? { q: keyword.trim() } : {}),
+          sort: sortOrder,
+          page,
+          limit: PAGE_SIZE,
+        })
+        .then((response) => {
+          if (cancelled) return
+          setOrders(response.data)
+          setSummary(response.summary)
+          setTotalOrders(response.meta.total)
+          setSyncedAt(new Date())
+        })
+        .catch((err: ApiError) => {
+          if (cancelled) return
+          setError(err.userMessage ?? 'Gagal memuat data pesanan')
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [statusFilter, shopFilter, keyword, range, sortOrder, page, refreshKey])
 
-    return orderRecords.filter((order) => {
-      if (new Date(order.createdAt).getTime() < periodStart) return false
-      if (shopFilter !== 'semua' && order.shopName !== shopFilter) return false
-      if (search && !order.code.toLowerCase().includes(search)) return false
-      return true
-    })
-  }, [periodStart, shopFilter, keyword])
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null)
+      setDetailError(null)
+      return
+    }
+    let cancelled = false
+    setDetailLoading(true)
+    setDetailError(null)
+    ordersApi
+      .detail(selectedId)
+      .then((response) => {
+        if (!cancelled) setDetail(response)
+      })
+      .catch((err: ApiError) => {
+        if (cancelled) return
+        setDetail(null)
+        setDetailError(err.userMessage ?? 'Gagal memuat detail pesanan')
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId, refreshKey])
 
   const statusCounts = useMemo(
     () => ({
-      semua: baseFiltered.length,
-      pending: baseFiltered.filter((order) => order.status === 'pending').length,
-      diproses: baseFiltered.filter((order) => order.status === 'diproses').length,
-      selesai: baseFiltered.filter((order) => order.status === 'selesai').length,
-      dibatalkan: baseFiltered.filter((order) => order.status === 'dibatalkan').length,
+      semua: summary?.count ?? 0,
+      pending: summary?.statusCounts.pending ?? 0,
+      diproses: summary?.statusCounts.diproses ?? 0,
+      selesai: summary?.statusCounts.selesai ?? 0,
+      dibatalkan: summary?.statusCounts.dibatalkan ?? 0,
     }),
-    [baseFiltered],
+    [summary],
   )
 
-  const filteredOrders = useMemo(() => {
-    const orders =
-      statusFilter === 'semua'
-        ? [...baseFiltered]
-        : baseFiltered.filter((order) => order.status === statusFilter)
-
-    return orders.sort((first, second) => {
-      const firstTime = new Date(first.createdAt).getTime()
-      const secondTime = new Date(second.createdAt).getTime()
-      return sortOrder === 'terbaru' ? secondTime - firstTime : firstTime - secondTime
-    })
-  }, [baseFiltered, statusFilter, sortOrder])
-
-  const totalValue = filteredOrders.reduce((total, order) => total + order.total, 0)
-  const averageTicket = filteredOrders.length
-    ? Math.round(totalValue / filteredOrders.length)
-    : 0
-  const paidShare = baseFiltered.length
-    ? Math.round(
-        ((statusCounts.selesai + statusCounts.diproses) / baseFiltered.length) * 100,
-      )
-    : 0
-
-  const pageCount = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE))
+  const totalValue = summary?.totalValue ?? 0
+  const averageTicket =
+    summary && summary.count > 0 ? Math.round(summary.totalValue / summary.count) : 0
+  const pageCount = Math.max(1, Math.ceil(totalOrders / PAGE_SIZE))
   const safePage = Math.min(page, pageCount)
-  const visibleOrders = filteredOrders.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  )
-
-  const selectedOrder = selectedCode
-    ? (filteredOrders.find((order) => order.code === selectedCode) ?? null)
-    : null
 
   const hasActiveFilter =
     statusFilter !== 'semua' || shopFilter !== 'semua' || Boolean(keyword) || period !== '30-hari'
+
+  const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1).filter(
+    (number) => number === 1 || number === pageCount || Math.abs(number - safePage) <= 1,
+  )
 
   function resetFilters() {
     setSearchParams(new URLSearchParams())
@@ -267,13 +295,14 @@ export default function AdminMonitoringOrderPage() {
     setSearchParams(next)
   }
 
-  const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1).filter(
-    (number) =>
-      number === 1 ||
-      number === pageCount ||
-      Math.abs(number - safePage) <= 1,
-  )
+  function refresh() {
+    setSyncedAt(new Date())
+    setRefreshKey((value) => value + 1)
+  }
 
+  const subtotal = detail
+    ? detail.items.reduce((total, item) => total + item.subtotal, 0)
+    : 0
   return (
     <div>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -306,16 +335,16 @@ export default function AdminMonitoringOrderPage() {
               Sinkronisasi terakhir:
             </p>
             <p className="mt-0.5 text-[11px] font-bold text-ink">
-              Baru saja ({clockFormatter.format(syncedAt)} WIB)
+              {clockFormatter.format(syncedAt)} WIB
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setSyncedAt(new Date())}
+            onClick={refresh}
             aria-label="Segarkan data pemantauan"
             className="flex size-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-ink"
           >
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -352,12 +381,9 @@ export default function AdminMonitoringOrderPage() {
           <p className="mt-3 text-[26px] font-extrabold leading-none tracking-tight text-ink">
             {formatRupiah(totalValue)}
           </p>
-          <p className="mt-auto flex items-center gap-1.5 pt-4 text-[10px] leading-relaxed text-muted">
-            <TrendingUp className="size-3.5 text-emerald-600" />
-            <span>
-              <span className="font-bold text-emerald-600">{paidShare}%</span> pesanan lunas
-              terverifikasi
-            </span>
+          <p className="mt-auto pt-4 text-[10px] leading-relaxed text-muted">
+            <span className="font-bold text-ink">{statusCounts.selesai}</span> selesai ·{' '}
+            <span className="font-bold text-ink">{statusCounts.diproses}</span> diproses
           </p>
         </article>
 
@@ -371,11 +397,12 @@ export default function AdminMonitoringOrderPage() {
             </span>
           </div>
           <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-[26px] font-extrabold leading-none tracking-tight text-ink">
-            {rupiahFormatter.format(filteredOrders.length)}
+            {rupiahFormatter.format(statusCounts.semua)}
             <span className="text-[10px] font-medium text-muted">pesanan</span>
           </p>
           <p className="mt-auto pt-4 text-[10px] leading-relaxed text-muted">
-            <span className="font-bold text-ink">100%</span> terhubung ke sistem NIB
+            <span className="font-bold text-ink">{statusCounts.pending}</span> menunggu tindakan
+            toko
           </p>
         </article>
 
@@ -408,7 +435,7 @@ export default function AdminMonitoringOrderPage() {
           </div>
           <p className="mt-3 flex items-baseline gap-2 text-[26px] font-extrabold leading-none">
             {statusCounts.diproses}
-            <span className="text-[10px] font-medium text-white/70">dalam pengiriman</span>
+            <span className="text-[10px] font-medium text-white/70">sedang diproses</span>
           </p>
           <button
             type="button"
@@ -464,21 +491,43 @@ export default function AdminMonitoringOrderPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-semibold text-muted">Periode:</span>
-            {periodOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => updateParam('periode', option.value, '30-hari')}
-                aria-pressed={period === option.value}
-                className={`rounded-lg px-2.5 py-1.5 text-[10px] transition ${
-                  period === option.value
-                    ? 'bg-[#f4f5fa] font-bold text-ink'
-                    : 'font-medium text-slate-500 hover:bg-slate-50 hover:text-ink'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+                          {periodOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => updateParam('periode', option.value, '30-hari')}
+                  aria-pressed={period === option.value}
+                  className={`rounded-lg px-2.5 py-1.5 text-[10px] transition ${
+                    period === option.value
+                      ? 'bg-[#f4f5fa] font-bold text-ink'
+                      : 'font-medium text-slate-500 hover:bg-slate-50 hover:text-ink'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            {period === 'kustom' && (
+              <div className="flex w-full flex-wrap items-center gap-1.5 pt-1 sm:w-auto sm:pt-0">
+                <input
+                  type="date"
+                  value={fromParam || wibDayKey(-29)}
+                  max={toParam || wibDayKey(0)}
+                  onChange={(event) => updateParam('dari', event.target.value, wibDayKey(-29))}
+                  aria-label="Tanggal awal"
+                  className="h-8 rounded-lg border border-line bg-white px-2 text-[10px] text-ink outline-none focus:border-primary"
+                />
+                <span className="text-[10px] text-muted">s.d.</span>
+                <input
+                  type="date"
+                  value={toParam || wibDayKey(0)}
+                  min={fromParam || wibDayKey(-29)}
+                  max={wibDayKey(0)}
+                  onChange={(event) => updateParam('sampai', event.target.value, wibDayKey(0))}
+                  aria-label="Tanggal akhir"
+                  className="h-8 rounded-lg border border-line bg-white px-2 text-[10px] text-ink outline-none focus:border-primary"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -489,27 +538,82 @@ export default function AdminMonitoringOrderPage() {
               type="search"
               value={keyword}
               onChange={(event) => updateParam('q', event.target.value, '')}
-              placeholder="#ORD-20261123-019"
+              placeholder="#ORD-0001"
               aria-label="Cari kode pesanan"
               className="h-11 w-full rounded-xl border border-line bg-[#f7f7fb] pl-9 pr-3 text-xs text-ink outline-none transition placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
             />
           </div>
           <div className="relative sm:w-[240px]">
-            <select
-              value={shopFilter}
-              onChange={(event) => updateParam('toko', event.target.value, 'semua')}
+            <button
+              type="button"
+              onClick={() => setShopPickerOpen((current) => !current)}
+              aria-expanded={shopPickerOpen}
               aria-label="Filter toko UMKM"
-              className="h-11 w-full cursor-pointer appearance-none rounded-xl border border-line bg-[#f7f7fb] pl-9 pr-9 text-[10px] text-ink outline-none transition focus:border-primary focus:bg-white"
+              className="flex h-11 w-full items-center gap-2 rounded-xl border border-line bg-[#f7f7fb] pl-9 pr-9 text-left text-[10px] text-ink outline-none transition focus:border-primary focus:bg-white"
             >
-              <option value="semua">Semua Toko UMKM</option>
-              {orderShops.map((shop) => (
-                <option key={shop} value={shop}>
-                  {shop}
-                </option>
-              ))}
-            </select>
+              <span className="truncate">{selectedShop?.name ?? 'Semua Toko UMKM'}</span>
+            </button>
             <Store className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+
+            {shopPickerOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShopPickerOpen(false)}
+                  aria-hidden
+                />
+                <div className="absolute left-0 right-0 z-50 mt-1 rounded-xl border border-line bg-white p-2 shadow-xl">
+                  <input
+                    type="search"
+                    autoFocus
+                    value={shopQuery}
+                    onChange={(event) => setShopQuery(event.target.value)}
+                    placeholder="Cari nama toko..."
+                    aria-label="Cari toko UMKM"
+                    className="h-9 w-full rounded-lg border border-line bg-[#f7f7fb] px-2.5 text-[10px] text-ink outline-none focus:border-primary"
+                  />
+                  <ul className="mt-1 max-h-56 divide-y divide-line overflow-y-auto">
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateParam('toko', 'semua', 'semua')
+                          setShopPickerOpen(false)
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+                      >
+                        Semua Toko UMKM
+                      </button>
+                    </li>
+                    {filteredShops.length === 0 ? (
+                      <li className="px-2 py-3 text-center text-[10px] text-muted">
+                        Toko tidak ditemukan.
+                      </li>
+                    ) : (
+                      filteredShops.map((shop) => (
+                        <li key={shop.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateParam('toko', shop.id, 'semua')
+                              setShopPickerOpen(false)
+                            }}
+                            className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-[10px] hover:bg-slate-50 ${
+                              shopFilter === shop.id
+                                ? 'font-bold text-primary'
+                                : 'font-medium text-slate-600'
+                            }`}
+                          >
+                            <span className="truncate">{shop.name}</span>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -520,7 +624,7 @@ export default function AdminMonitoringOrderPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-sm font-bold text-ink">Daftar Transaksi UMKM</h2>
               <span className="rounded-full bg-[#f4f5fa] px-2 py-0.5 text-[9px] font-semibold text-slate-500">
-                {filteredOrders.length} dari {orderRecords.length} pesanan
+                {loading ? 'Memuat…' : `${totalOrders} pesanan`}
               </span>
             </div>
             <div className="relative">
@@ -550,7 +654,40 @@ export default function AdminMonitoringOrderPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {visibleOrders.length === 0 ? (
+                {loading && orders.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                        <span className="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                          <RefreshCw className="size-5 animate-spin" />
+                        </span>
+                        <h3 className="mt-3 text-sm font-bold text-ink">Memuat pesanan</h3>
+                        <p className="mt-1 text-xs text-muted">
+                          Mengambil data transaksi terbaru dari server.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                        <span className="flex size-12 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                          <Info className="size-5" />
+                        </span>
+                        <h3 className="mt-3 text-sm font-bold text-ink">Gagal memuat pesanan</h3>
+                        <p className="mt-1 max-w-md text-xs text-muted">{error}</p>
+                        <button
+                          type="button"
+                          onClick={refresh}
+                          className="mt-4 rounded-xl border border-line bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                        >
+                          Coba lagi
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : orders.length === 0 ? (
                   <tr>
                     <td colSpan={6}>
                       <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
@@ -576,18 +713,18 @@ export default function AdminMonitoringOrderPage() {
                     </td>
                   </tr>
                 ) : (
-                  visibleOrders.map((order) => {
+                  orders.map((order) => {
                     const meta = statusMeta[order.status]
-                    const isSelected = order.code === selectedOrder?.code
+                    const isSelected = order.id === selectedId
 
                     return (
                       <tr
-                        key={order.code}
-                        onClick={() => setSelectedCode(order.code)}
+                        key={order.id}
+                        onClick={() => setSelectedId(order.id)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault()
-                            setSelectedCode(order.code)
+                            setSelectedId(order.id)
                           }
                         }}
                         tabIndex={0}
@@ -605,10 +742,10 @@ export default function AdminMonitoringOrderPage() {
                         </td>
                         <td className="px-3 py-3.5">
                           <p className="text-[11px] font-bold text-ink">{order.shopName}</p>
-                          <p className="mt-0.5 text-[9px] text-muted">{order.shopCategory}</p>
+                          <p className="mt-0.5 text-[9px] text-muted">{order.shopOwner}</p>
                         </td>
                         <td className="px-3 py-3.5 text-[11px] text-slate-600">
-                          {order.customer}
+                          {order.customerName}
                         </td>
                         <td className="px-3 py-3.5 text-right text-[11px] font-bold text-ink">
                           {formatRupiah(order.total)}
@@ -636,10 +773,10 @@ export default function AdminMonitoringOrderPage() {
             <p className="text-[10px] text-muted">
               Menampilkan{' '}
               <span className="font-semibold text-ink">
-                {filteredOrders.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}-
-                {Math.min(safePage * PAGE_SIZE, filteredOrders.length)}
+                {totalOrders === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}-
+                {Math.min(safePage * PAGE_SIZE, totalOrders)}
               </span>{' '}
-              dari <span className="font-semibold text-ink">{filteredOrders.length}</span> pesanan
+              dari <span className="font-semibold text-ink">{totalOrders}</span> pesanan
             </p>
 
             <div className="flex items-center gap-1">
@@ -688,163 +825,187 @@ export default function AdminMonitoringOrderPage() {
         </section>
 
         <aside className="min-w-0 xl:sticky xl:top-24 xl:self-start">
-          {selectedOrder ? (
-            <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="break-all font-mono text-xs font-bold text-ink">
-                    {selectedOrder.code}
-                  </p>
-                  <span
-                    className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-semibold ${
-                      statusMeta[selectedOrder.status].badge
-                    }`}
-                  >
-                    <span
-                      className={`size-1.5 rounded-full ${statusMeta[selectedOrder.status].dot}`}
-                    />
-                    {selectedOrder.status === 'diproses'
-                      ? 'Diproses Toko'
-                      : statusMeta[selectedOrder.status].label}
-                  </span>
-                </div>
+          {selectedId ? (
+            detailError ? (
+              <section className="flex flex-col items-center rounded-2xl border border-line bg-white px-6 py-12 text-center shadow-sm">
+                <span className="flex size-12 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                  <Info className="size-5" />
+                </span>
+                <h3 className="mt-3 text-sm font-bold text-ink">Detail gagal dimuat</h3>
+                <p className="mt-1 text-[10px] leading-relaxed text-muted">{detailError}</p>
                 <button
                   type="button"
-                  onClick={() => setSelectedCode(null)}
-                  aria-label="Tutup detail pesanan"
-                  className="flex size-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  onClick={refresh}
+                  className="mt-4 rounded-xl border border-line bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
-                  <X className="size-4" />
+                  Coba lagi
                 </button>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4">
-                <div className="min-w-0">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted">
-                    Toko Terkait
-                  </p>
-                  <p className="mt-1 text-[11px] font-bold text-ink">
-                    {selectedOrder.shopName}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1 text-[9px] text-muted">
-                    <User className="size-2.5 shrink-0" />
-                    <span className="truncate">Pemilik: {selectedOrder.shopOwner}</span>
-                  </p>
-                  <p className="mt-1 break-all text-[9px] text-muted">
-                    NIB: {selectedOrder.shopNib}
-                  </p>
-                  <p className="mt-1 text-[9px] text-muted">{selectedOrder.shopCity}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted">
-                    Pelanggan
-                  </p>
-                  <p className="mt-1 text-[11px] font-bold text-ink">{selectedOrder.customer}</p>
-                  <p className="mt-1 flex items-center gap-1 text-[9px] text-slate-400">
-                    <Lock className="size-2.5 shrink-0" />
-                    Privasi Data Aktif
-                  </p>
-                  <p className="mt-1 flex items-start gap-1 text-[9px] text-muted">
-                    <MapPin className="mt-0.5 size-2.5 shrink-0" />
-                    <span>Alamat tujuan: {selectedOrder.destinationCity}</span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[11px] font-bold text-ink">Rincian Item Belanja</h3>
-                  <span className="text-[9px] text-muted">
-                    {selectedOrder.items.length} macam menu
-                  </span>
-                </div>
-                <div className="mt-2 divide-y divide-line rounded-xl border border-line">
-                  {selectedOrder.items.map((item) => (
-                    <div
-                      key={item.name}
-                      className="flex items-start justify-between gap-3 px-3 py-2.5"
+              </section>
+            ) : detailLoading || !detail ? (
+              <section className="flex flex-col items-center rounded-2xl border border-line bg-white px-6 py-12 text-center shadow-sm">
+                <span className="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                  <RefreshCw className="size-5 animate-spin" />
+                </span>
+                <h3 className="mt-3 text-sm font-bold text-ink">Memuat detail</h3>
+                <p className="mt-1 text-[10px] leading-relaxed text-muted">
+                  Mengambil rincian item dan jejak status pesanan.
+                </p>
+              </section>
+            ) : (
+              <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-all font-mono text-xs font-bold text-ink">{detail.code}</p>
+                    <span
+                      className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-semibold ${
+                        statusMeta[detail.status].badge
+                      }`}
                     >
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold leading-snug text-ink">
-                          {item.name}
-                        </p>
-                        <p className="mt-0.5 text-[9px] text-muted">
-                          {item.qty}x @ {formatRupiah(item.unitPrice)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-[10px] font-bold text-ink">
-                        {formatRupiah(item.qty * item.unitPrice)}
+                      <span className={`size-1.5 rounded-full ${statusMeta[detail.status].dot}`} />
+                      {detail.status === 'diproses'
+                        ? 'Diproses Toko'
+                        : statusMeta[detail.status].label}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(null)}
+                    aria-label="Tutup detail pesanan"
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4">
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted">
+                      Toko Terkait
+                    </p>
+                    <p className="mt-1 text-[11px] font-bold text-ink">{detail.shop.name}</p>
+                    <p className="mt-1 flex items-center gap-1 text-[9px] text-muted">
+                      <User className="size-2.5 shrink-0" />
+                      <span className="truncate">Pemilik: {detail.shop.ownerName}</span>
+                    </p>
+                    <p className="mt-1 break-all text-[9px] text-muted">
+                      NIB: {detail.shop.nib ?? 'Belum terdaftar'}
+                    </p>
+                    <p className="mt-1 text-[9px] text-muted">{detail.shop.phone ?? '-'}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted">
+                      Pelanggan
+                    </p>
+                    <p className="mt-1 text-[11px] font-bold text-ink">{detail.customer.name}</p>
+                    <p className="mt-1 flex items-center gap-1 text-[9px] text-slate-400">
+                      <Lock className="size-2.5 shrink-0" />
+                      Privasi Data Aktif
+                    </p>
+                    <p className="mt-1 flex items-start gap-1 text-[9px] text-muted">
+                      <MapPin className="mt-0.5 size-2.5 shrink-0" />
+                      <span>Alamat toko: {detail.shop.address ?? '-'}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-[11px] font-bold text-ink">Rincian Item Belanja</h3>
+                    <span className="text-[9px] text-muted">
+                      {detail.items.length} macam produk
+                    </span>
+                  </div>
+                  <div className="mt-2 divide-y divide-line rounded-xl border border-line">
+                    {detail.items.length === 0 ? (
+                      <p className="px-3 py-4 text-center text-[10px] text-muted">
+                        Tidak ada rincian item pada pesanan ini.
+                      </p>
+                    ) : (
+                      detail.items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-start justify-between gap-3 px-3 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold leading-snug text-ink">
+                              {item.name}
+                            </p>
+                            <p className="mt-0.5 text-[9px] text-muted">
+                              {item.qty}x @ {formatRupiah(item.unitPrice)}
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-[10px] font-bold text-ink">
+                            {formatRupiah(item.subtotal)}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-xl bg-[#f4f5fa] p-3.5">
+                  <div className="space-y-1.5 text-[10px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted">Subtotal Produk</span>
+                      <span className="font-semibold text-ink">{formatRupiah(subtotal)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-end justify-between gap-2 border-t border-line pt-2.5">
+                    <div>
+                      <p className="text-[11px] font-bold text-ink">Total Pembayaran</p>
+                      <p className="mt-0.5 text-[9px] text-muted">
+                        Status: {statusMeta[detail.status].label}
                       </p>
                     </div>
-                  ))}
+                    <p className="text-lg font-extrabold leading-none text-primary">
+                      {formatRupiah(detail.total)}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-3 rounded-xl bg-[#f4f5fa] p-3.5">
-                <div className="space-y-1.5 text-[10px]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted">Subtotal Produk</span>
-                    <span className="font-semibold text-ink">
-                      {formatRupiah(selectedOrder.subtotal)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted">
-                      Ongkos Kirim Kurir Lokal{' '}
-                      <span className="rounded bg-white px-1 py-0.5 text-[8px] font-semibold text-slate-500">
-                        Reguler
-                      </span>
-                    </span>
-                    <span className="font-semibold text-ink">
-                      {selectedOrder.shippingFee === 0
-                        ? 'Gratis'
-                        : formatRupiah(selectedOrder.shippingFee)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted">Biaya Layanan Gerbang UMKM</span>
-                    <span className="font-semibold text-emerald-600">Gratis (Subsidi)</span>
-                  </div>
+                <div className="mt-4">
+                  <h3 className="text-[11px] font-bold text-ink">Jejak Status Transaksi</h3>
+                  {detail.statusHistory.length === 0 ? (
+                    <p className="mt-3 rounded-xl border border-dashed border-line px-3 py-4 text-center text-[10px] text-muted">
+                      Belum ada riwayat status untuk pesanan ini.
+                    </p>
+                  ) : (
+                    <ol className="relative mt-3 space-y-3.5 before:absolute before:bottom-1 before:left-[5px] before:top-1 before:w-px before:bg-line">
+                      {detail.statusHistory.map((event, index) => {
+                        const isLatest = index === detail.statusHistory.length - 1
+                        return (
+                          <li key={event.id} className="relative pl-5">
+                            <span
+                              className={`absolute left-0 top-1 size-[11px] rounded-full border-2 border-white ${
+                                isLatest ? 'bg-primary' : 'bg-slate-300'
+                              }`}
+                            />
+                            <p className="text-[10px] font-bold leading-snug text-ink">
+                              {statusHistoryTitle(event.toStatus)}
+                            </p>
+                            <p className="mt-0.5 text-[9px] leading-relaxed text-muted">
+                              {event.note ?? 'Status pesanan diperbarui.'}
+                            </p>
+                            <p className="mt-0.5 text-[8px] text-slate-400">
+                              {formatTime(event.createdAt)}
+                              {event.changedBy ? ` · oleh ${event.changedBy.name}` : ''}
+                            </p>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  )}
                 </div>
-                <div className="mt-2 flex items-end justify-between gap-2 border-t border-line pt-2.5">
-                  <div>
-                    <p className="text-[11px] font-bold text-ink">Total Pembayaran</p>
-                    <p className="mt-0.5 text-[9px] text-muted">{selectedOrder.paymentLabel}</p>
-                  </div>
-                  <p className="text-lg font-extrabold leading-none text-primary">
-                    {formatRupiah(selectedOrder.total)}
+
+                <div className="mt-4 flex gap-2 rounded-xl bg-[#f4f5fa] p-3">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
+                  <p className="text-[9px] leading-relaxed text-muted">
+                    Mode Monitoring: perubahan status pesanan dikelola secara mandiri oleh pemilik
+                    toko. Admin hanya dapat membaca data.
                   </p>
                 </div>
-              </div>
-
-              <div className="mt-4">
-                <h3 className="text-[11px] font-bold text-ink">Jejak Status Transaksi</h3>
-                <ol className="relative mt-3 space-y-3.5 before:absolute before:bottom-1 before:left-[5px] before:top-1 before:w-px before:bg-line">
-                  {buildTimeline(selectedOrder).map((event) => (
-                    <li key={`${event.title}-${event.at}`} className="relative pl-5">
-                      <span
-                        className={`absolute left-0 top-1 size-[11px] rounded-full border-2 border-white ${
-                          event.tone === 'primary' ? 'bg-primary' : 'bg-slate-300'
-                        }`}
-                      />
-                      <p className="text-[10px] font-bold leading-snug text-ink">{event.title}</p>
-                      <p className="mt-0.5 text-[9px] leading-relaxed text-muted">
-                        {event.description}
-                      </p>
-                      <p className="mt-0.5 text-[8px] text-slate-400">{formatTime(event.at)}</p>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              <div className="mt-4 flex gap-2 rounded-xl bg-[#f4f5fa] p-3">
-                <Info className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
-                <p className="text-[9px] leading-relaxed text-muted">
-                  Mode Monitoring: perubahan status pesanan dikelola secara mandiri oleh pemilik
-                  toko dan mitra kurir pengiriman.
-                </p>
-              </div>
-            </section>
+              </section>
+            )
           ) : (
             <section className="flex flex-col items-center rounded-2xl border border-line bg-white px-6 py-12 text-center shadow-sm">
               <span className="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">

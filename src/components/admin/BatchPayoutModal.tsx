@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react'
-import type { PayoutRecord, PayoutStatus } from '../../lib/admin-finance-data'
+import type { PayoutRecord, PayoutStatus } from '../../lib/api/types'
 
 const statusMeta: Record<PayoutStatus, { label: string; badge: string; dot: string }> = {
   menunggu: { label: 'Menunggu Transfer', badge: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },

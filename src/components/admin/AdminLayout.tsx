@@ -13,7 +13,21 @@ export default function AdminLayout() {
   useEffect(() => {
     const s = getAdminSession()
     if (!s?.token) { setChecking(false); setSession(null); return }
-    authApi.me().then((user) => { setSession({ ...s, id: user.id, name: user.name, email: user.email, role: user.role as any }); setChecking(false) }).catch(() => { clearAdminSession(); setSession(null); setChecking(false) })
+    authApi
+      .me()
+      .then((user) => {
+        if (user.role !== 'ADMIN') {
+          clearAdminSession()
+          setSession(null)
+          return
+        }
+        setSession({ ...s, id: user.id, name: user.name, email: user.email, role: 'ADMIN' })
+      })
+      .catch(() => {
+        clearAdminSession()
+        setSession(null)
+      })
+      .finally(() => setChecking(false))
   }, [])
 
   if (checking) return <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">Memuat sesi...</div>

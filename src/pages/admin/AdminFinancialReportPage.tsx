@@ -9,34 +9,21 @@ import {
   ChevronRight,
   Copy,
   Download,
-  Hammer,
   History,
   Landmark,
   Layers,
   Percent,
-  QrCode,
   RefreshCw,
   Search,
   ShieldCheck,
-  Shirt,
   Store,
-  TrendingUp,
-  UtensilsCrossed,
   Wallet,
 } from 'lucide-react'
 import AdminToast, { type ToastTone } from '../../components/admin/AdminToast'
 import BatchPayoutModal from '../../components/admin/BatchPayoutModal'
 import FinanceTrendChart from '../../components/admin/FinanceTrendChart'
-import {
-  auditEntries,
-  commissionTiers,
-  escrowAccount,
-  financeDays,
-  financeMonthLabel,
-  type PayoutRecord,
-  type PayoutStatus,
-} from '../../lib/admin-finance-data'
-import { payoutsApi } from '../../lib/api/services'
+import type { FinanceDay, PayoutRecord, PayoutStatus } from '../../lib/api/types'
+import { financeApi, payoutsApi } from '../../lib/api/services'
 
 type Period = 'hari-ini' | '7-hari' | 'bulan-ini' | 'kustom'
 type PayoutTab = 'semua' | PayoutStatus
@@ -67,7 +54,18 @@ const payoutTabs: { value: PayoutTab; label: string }[] = [
   { value: 'terkirim', label: 'Terkirim' },
 ]
 
-const tierIcons = [UtensilsCrossed, Hammer, Shirt]
+const tierIcons = [Wallet, Percent, Banknote]
+
+const financeMonthLabel = new Intl.DateTimeFormat('id-ID', {
+  month: 'short',
+  year: 'numeric',
+}).format(new Date())
+
+function dateKeyDaysAgo(daysAgo: number) {
+  const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 function isActionable(status: PayoutStatus) {
   return status === 'menunggu' || status === 'diverifikasi'
@@ -107,8 +105,8 @@ function getInitials(name: string) {
 
 export default function AdminFinancialReportPage() {
   const [period, setPeriod] = useState<Period>('bulan-ini')
-  const [customStart, setCustomStart] = useState(financeDays[0].date)
-  const [customEnd, setCustomEnd] = useState(financeDays[financeDays.length - 1].date)
+  const [customStart, setCustomStart] = useState(() => dateKeyDaysAgo(29))
+  const [customEnd, setCustomEnd] = useState(() => dateKeyDaysAgo(0))
   const [syncedAt, setSyncedAt] = useState(() => new Date())
   const queryClient = useQueryClient()
   const {
@@ -117,6 +115,13 @@ export default function AdminFinancialReportPage() {
     isError: payoutsError,
     refetch: refetchPayouts,
   } = useQuery({ queryKey: ['admin-payouts'], queryFn: payoutsApi.list })
+  const { data: finance } = useQuery({
+    queryKey: ['admin-finance'],
+    queryFn: () =>
+      financeApi.get({ from: dateKeyDaysAgo(89), to: dateKeyDaysAgo(0) }),
+  })
+  const financeDays = useMemo<FinanceDay[]>(() => finance?.daily ?? [], [finance])
+  const escrowAccount = finance?.escrow ?? { bank: null, accountNumber: null, outstanding: 0 }
   const [processing, setProcessing] = useState(false)
   const [statusTab, setStatusTab] = useState<PayoutTab>('semua')
   const [keyword, setKeyword] = useState('')
@@ -147,14 +152,36 @@ export default function AdminFinancialReportPage() {
     if (period === 'kustom') {
       return financeDays.filter((day) => day.date >= customStart && day.date <= customEnd)
     }
-    return financeDays
-  }, [period, customStart, customEnd])
+    const monthKey = dateKeyDaysAgo(0).slice(0, 7)
+    const monthDays = financeDays.filter((day) => day.date.startsWith(monthKey))
+    return monthDays.length ? monthDays : financeDays
+  }, [period, customStart, customEnd, financeDays])
 
   const grossTotal = daysInPeriod.reduce((total, day) => total + day.gross, 0)
-  const ordersTotal = daysInPeriod.reduce((total, day) => total + day.orders, 0)
-  const commissionTotal = Math.round(grossTotal * 0.01)
+  const ordersTotal = daysInPeriod.reduce((total, day) => total + day.completedOrders, 0)
+  const commissionTotal = daysInPeriod.reduce((total, day) => total + day.commission, 0)
+  const disbursedTotal = daysInPeriod.reduce((total, day) => total + day.disbursed, 0)
   const averageDaily = daysInPeriod.length ? Math.round(grossTotal / daysInPeriod.length) : 0
-  const qrisIncoming = Math.round((financeDays[financeDays.length - 1]?.gross ?? 0) * 0.52)
+  const settlementRate = payouts.length
+    ? Math.round(((payouts.filter((payout) => payout.status === 'berhasil' || payout.status === 'terkirim').length / payouts.length) * 1000)) / 10
+    : 0
+
+  const chartData = useMemo(
+    () =>
+      daysInPeriod.map((day) => ({
+        ...day,
+        label: day.date === dateKeyDaysAgo(0)
+          ? 'Hari Ini'
+          : new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short' }).format(new Date(`${day.date}T00:00:00+07:00`)),
+      })),
+    [daysInPeriod],
+  )
+
+  const commissionTiers = [
+    { label: 'Omzet pesanan selesai', rate: formatRupiah(grossTotal), note: 'Realisasi' },
+    { label: 'Komisi platform tercatat', rate: formatRupiah(commissionTotal), note: 'Payout' },
+    { label: 'Dana dicairkan ke merchant', rate: formatRupiah(disbursedTotal), note: 'Settlement' },
+  ]
 
   const readyPayouts = payouts.filter(
     (payout) => payout.status === 'menunggu' || payout.status === 'diverifikasi',
@@ -207,6 +234,7 @@ export default function AdminFinancialReportPage() {
     selectableVisiblePayouts.every((payout) => selectedIds.includes(payout.id))
   const selectedPayouts = payouts.filter((payout) => selectedIds.includes(payout.id))
 
+  const auditEntries = finance?.activities ?? []
   const visibleAudit =
     auditFilter === 'terbaru' ? auditEntries.slice(0, AUDIT_PREVIEW_COUNT) : auditEntries
 
@@ -285,9 +313,9 @@ export default function AdminFinancialReportPage() {
       ['Laporan Keuangan Platform Ratis'],
       ['Periode', periodLabel],
       ['Total Omzet Kotor (GMV)', grossTotal],
-      ['Pendapatan Komisi (1%)', commissionTotal],
+      ['Komisi Platform Tercatat', commissionTotal],
       ['Dana Siap Settlement', readyTotal],
-      ['Dana Kini QRIS (H+1)', qrisIncoming],
+      ['Total Dana Dicairkan', disbursedTotal],
       [],
       ['Tanggal', 'Omzet Masuk', 'Dana Dicairkan', 'Komisi Platform', 'Jumlah Pesanan'],
       ...daysInPeriod.map((day) => [
@@ -338,6 +366,10 @@ export default function AdminFinancialReportPage() {
   }
 
   async function handleCopyAccount() {
+    if (!escrowAccount.accountNumber) {
+      showToast('Nomor rekening escrow belum dikonfigurasi.', 'error')
+      return
+    }
     try {
       await navigator.clipboard.writeText(escrowAccount.accountNumber)
       showToast('Nomor rekening escrow disalin ke papan klip.', 'info')
@@ -392,8 +424,8 @@ export default function AdminFinancialReportPage() {
               Laporan &amp; Keuntungan Platform
             </h1>
             <p className="mt-2 max-w-xl text-xs leading-relaxed text-muted">
-              Agregasi omzet GMV nasional, rekonsiliasi bagi hasil komisi platform (1.0%), dan
-              pengawasan payout saldo merchant UMKM.
+              Agregasi omzet GMV nasional, rekonsiliasi komisi platform, dan pengawasan payout
+              saldo merchant UMKM.
             </p>
           </div>
 
@@ -439,7 +471,7 @@ export default function AdminFinancialReportPage() {
             <input
               type="date"
               value={customStart}
-              min={financeDays[0].date}
+              min={financeDays[0]?.date ?? customStart}
               max={customEnd}
               onChange={(event) => {
                 setCustomStart(event.target.value)
@@ -454,7 +486,7 @@ export default function AdminFinancialReportPage() {
               type="date"
               value={customEnd}
               min={customStart}
-              max={financeDays[financeDays.length - 1].date}
+              max={financeDays[financeDays.length - 1]?.date ?? customEnd}
               onChange={(event) => {
                 setCustomEnd(event.target.value)
                 setPage(1)
@@ -485,21 +517,15 @@ export default function AdminFinancialReportPage() {
                 {numberFormatter.format(grossTotal)}
               </p>
               <div className="mt-auto pt-3 text-[9px] leading-relaxed text-muted">
-                <p>vs {numberFormatter.format(ordersTotal)} pesanan</p>
-                <p className="mt-1 flex items-start gap-1">
-                  <TrendingUp className="mt-0.5 size-3 shrink-0 text-emerald-600" />
-                  <span>
-                    <span className="font-bold text-emerald-600">+12,4%</span> dibanding rata-rata
-                    lalu lintas
-                  </span>
-                </p>
+                <p>vs {numberFormatter.format(ordersTotal)} pesanan selesai</p>
+                <p className="mt-1">Rata-rata harian {formatRupiah(averageDaily)}</p>
               </div>
             </article>
 
             <article className="flex flex-col rounded-2xl border border-line bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-[8px] font-bold uppercase leading-relaxed tracking-[0.12em] text-muted">
-                  Pendapatan Komisi (1.0%)
+                  Komisi Platform Tercatat
                 </p>
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
                   <Percent className="size-3.5" />
@@ -509,12 +535,10 @@ export default function AdminFinancialReportPage() {
               <p className="text-[21px] font-extrabold leading-tight tracking-tight text-ink">
                 {numberFormatter.format(commissionTotal)}
               </p>
-              <p className="mt-auto flex items-start gap-1 pt-3 text-[9px] leading-relaxed text-muted">
-                <TrendingUp className="mt-0.5 size-3 shrink-0 text-emerald-600" />
-                <span>
-                  <span className="font-bold text-emerald-600">+14,1%</span> laju pertumbuhan
-                  bulanan
-                </span>
+              <p className="mt-auto pt-3 text-[9px] leading-relaxed text-muted">
+                Tarif efektif{' '}
+                {grossTotal ? ((commissionTotal / grossTotal) * 100).toFixed(2) : '0.00'}% dari
+                omzet
               </p>
             </article>
 
@@ -543,22 +567,22 @@ export default function AdminFinancialReportPage() {
             <article className="flex flex-col rounded-2xl border border-line bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-[8px] font-bold uppercase leading-relaxed tracking-[0.12em] text-muted">
-                  Dana Kini QRIS (H+1)
+                  Total Dana Dicairkan
                 </p>
                 <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-400">
-                  <QrCode className="size-3.5" />
+                  <Landmark className="size-3.5" />
                 </span>
               </div>
               <p className="mt-3 text-[9px] font-medium text-muted">Rp</p>
               <p className="text-[21px] font-extrabold leading-tight tracking-tight text-ink">
-                {numberFormatter.format(qrisIncoming)}
+                {numberFormatter.format(disbursedTotal)}
               </p>
               <div className="mt-auto space-y-0.5 pt-3 text-[9px] leading-relaxed text-muted">
                 <p className="flex items-center gap-1">
-                  <Landmark className="size-3 shrink-0" />
-                  Kliring Bank Indonesia
+                  <Banknote className="size-3 shrink-0" />
+                  Payout berstatus berhasil/terkirim
                 </p>
-                <p>Pukul 23:59 WIB</p>
+                <p>Pada rentang terpilih</p>
               </div>
             </article>
           </section>
@@ -589,7 +613,7 @@ export default function AdminFinancialReportPage() {
             </div>
 
             <div className="mt-4">
-              <FinanceTrendChart data={daysInPeriod} />
+              <FinanceTrendChart data={chartData} />
             </div>
 
             <div className="mt-4 grid gap-3 rounded-xl bg-[#f4f5fa] p-3 sm:grid-cols-3">
@@ -603,7 +627,7 @@ export default function AdminFinancialReportPage() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-[9px] text-muted">Rasio Sukses Settlement</p>
-                  <p className="mt-0.5 text-xs font-bold text-ink">99,4%</p>
+                  <p className="mt-0.5 text-xs font-bold text-ink">{settlementRate}%</p>
                 </div>
                 <ShieldCheck className="size-3.5 shrink-0 text-slate-400" />
               </div>
@@ -611,7 +635,7 @@ export default function AdminFinancialReportPage() {
                 <div>
                   <p className="text-[9px] text-muted">Retensi Saldo Escrow</p>
                   <p className="mt-0.5 text-xs font-bold text-ink">
-                    {formatRupiah(escrowAccount.balance)}
+                    {formatRupiah(escrowAccount.outstanding)}
                   </p>
                 </div>
                 <Landmark className="size-3.5 shrink-0 text-slate-400" />
@@ -951,7 +975,7 @@ export default function AdminFinancialReportPage() {
                 </h2>
               </div>
               <span className="shrink-0 rounded bg-primary-soft/60 px-1.5 py-1 text-[8px] font-bold uppercase tracking-wide text-primary">
-                Terverifikasi {escrowAccount.bankShort}
+                {escrowAccount.bank ? 'Rekening Platform' : 'Belum Dikonfigurasi'}
               </span>
             </div>
 
@@ -962,7 +986,9 @@ export default function AdminFinancialReportPage() {
                 </p>
                 <Landmark className="size-3.5 shrink-0 text-slate-400" />
               </div>
-              <p className="mt-1 text-xs font-bold leading-snug text-ink">{escrowAccount.bank}</p>
+              <p className="mt-1 text-xs font-bold leading-snug text-ink">
+                {escrowAccount.bank ?? 'Belum dikonfigurasi'}
+              </p>
 
               <div className="mt-3 border-t border-line pt-2.5">
                 <div className="flex items-start justify-between gap-2">
@@ -982,7 +1008,7 @@ export default function AdminFinancialReportPage() {
                   </button>
                 </div>
                 <p className="mt-1 break-all font-mono text-[10px] font-semibold tracking-wide text-ink">
-                  {escrowAccount.accountNumber}
+                  {escrowAccount.accountNumber ?? 'Belum dikonfigurasi'}
                 </p>
               </div>
 
@@ -993,7 +1019,7 @@ export default function AdminFinancialReportPage() {
                   Tersedia:
                 </p>
                 <p className="text-sm font-extrabold leading-none text-ink">
-                  {formatRupiah(escrowAccount.balance)}
+                  {formatRupiah(escrowAccount.outstanding)}
                 </p>
               </div>
             </div>
@@ -1001,10 +1027,10 @@ export default function AdminFinancialReportPage() {
             <div className="mt-3 flex gap-2">
               <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <div>
-                <p className="text-[9px] font-bold text-ink">Protokol Multi-Signature Aktif</p>
+                <p className="text-[9px] font-bold text-ink">Dana Tertahan untuk Pencairan</p>
                 <p className="mt-0.5 text-[9px] leading-relaxed text-muted">
-                  Fondasi Rekening Rp 10.000.000 dimitigasi otorisasi 2 dari 3 Super-Admin
-                  platform.
+                  Saldo di atas adalah total pengajuan berstatus menunggu atau diverifikasi yang
+                  belum dibayarkan ke merchant.
                 </p>
               </div>
             </div>
@@ -1015,11 +1041,10 @@ export default function AdminFinancialReportPage() {
               <span className="flex size-6 items-center justify-center rounded-lg bg-primary-soft/60 text-primary">
                 <Percent className="size-3" />
               </span>
-              <h2 className="text-[11px] font-bold text-ink">Skema Bagi Hasil UMKM</h2>
+              <h2 className="text-[11px] font-bold text-ink">Realisasi Bagi Hasil &amp; Pencairan</h2>
             </div>
             <p className="mt-1.5 text-[9px] leading-relaxed text-muted">
-              Kebijakan komisi transaksi sesuai program kemitraan digital Pemda dan standarisasi
-              Ratis 2026.
+              Angka aktual dari pesanan selesai dan pengajuan pencairan pada rentang terpilih.
             </p>
 
             <ul className="mt-3 space-y-2">
@@ -1045,9 +1070,6 @@ export default function AdminFinancialReportPage() {
                       }`}
                     >
                       {tier.rate}
-                      {index === 0 && (
-                        <span className="block text-[7px] font-semibold">(Inklusif)</span>
-                      )}
                     </span>
                   </li>
                 )
@@ -1055,10 +1077,10 @@ export default function AdminFinancialReportPage() {
             </ul>
 
             <div className="mt-3 rounded-xl border border-line bg-[#f4f5fa] p-2.5">
-              <p className="text-[9px] font-bold text-ink">Biaya Penarikan Pembeli: Rp 0</p>
+              <p className="text-[9px] font-bold text-ink">Sumber Perhitungan</p>
               <p className="mt-0.5 text-[9px] leading-relaxed text-muted">
-                Seluruh biaya gateway QRIS ditanggung subsidi terintegrasi dinas koperasi setempat
-                demi mempercepat penetrasi transaksi digital para pelaku UMKM.
+                Omzet dihitung dari pesanan berstatus selesai; komisi dan dana dicairkan dihitung
+                dari payout yang sudah diproses pada rentang tanggal.
               </p>
             </div>
           </section>
@@ -1097,7 +1119,7 @@ export default function AdminFinancialReportPage() {
 
             <ol className="mt-3 space-y-3">
               {visibleAudit.map((entry) => (
-                <li key={entry.title} className="flex gap-2">
+                <li key={entry.id} className="flex gap-2">
                   <span
                     className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
                       entry.tone === 'success' ? 'bg-emerald-500' : 'bg-amber-500'
@@ -1121,7 +1143,9 @@ export default function AdminFinancialReportPage() {
                     <p className="mt-0.5 text-[9px] leading-relaxed text-muted">
                       {entry.description}
                     </p>
-                    <p className="mt-0.5 text-[8px] text-slate-400">{entry.time}</p>
+                    <p className="mt-0.5 text-[8px] text-slate-400">
+                      {payoutTimeFormatter.format(new Date(entry.at))} WIB
+                    </p>
                   </div>
                 </li>
               ))}

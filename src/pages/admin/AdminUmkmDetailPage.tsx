@@ -19,9 +19,9 @@ const statusMeta: Record<UmkmStatus, { label: string; badge: string; dot: string
 }
 const auditDotTones: Record<UmkmAuditTone, string> = { warning: 'border-amber-400', success: 'border-emerald-500', neutral: 'border-slate-300' }
 const verifierGuidelines = [
-  'Pastikan foto tempat usaha asli dan bukan foto contoh Google/Katalog pihak ketiga.',
-  'Nomor WhatsApp dapat dihubungi dan format alamat mencakup kelurahan dan kecamatan.',
-  'Harga yang dicantumkan wajar dan tidak terindikasi penipuan skema promo fiktif.',
+  'NIB bersifat opsional; toko tanpa NIB tetap dapat diverifikasi berdasarkan data lain.',
+  'Cocokkan nama toko, nama pemilik, nomor HP, dan alamat dengan data pendaftaran.',
+  'Jika foto usaha diunggah, pastikan menampilkan tempat usaha yang sesuai.',
 ]
 const getInitials = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')
 const formatDate = (iso: string) => new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date(iso))
@@ -48,7 +48,6 @@ export default function AdminUmkmDetailPage() {
   const [toast, setToast] = useState<ToastState | null>(null)
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const [reason, setReason] = useState('')
-  const [now] = useState(() => Date.now())
 
   const loadDetail = useCallback(async () => {
     if (!id) return
@@ -75,9 +74,6 @@ export default function AdminUmkmDetailPage() {
   const status = record.status
   const statusInfo = statusMeta[status]
   const events = detail.auditTrail ?? []
-  const deadline = new Date(record.registeredAt).getTime() + 24 * 60 * 60 * 1000
-  const remainingMs = deadline - now
-  const slaLabel = remainingMs > 0 ? `${Math.floor(remainingMs / 3_600_000)}j ${Math.floor((remainingMs % 3_600_000) / 60_000)}m` : 'Lewat SLA'
   const showToast = (message: string, tone: ToastTone) => setToast({ id: Date.now(), message, tone })
   const handleBack = () => { if (location.key !== 'default') navigate(-1); else navigate('/admin/umkm') }
   const openDialog = (kind: DialogKind) => { setDialog(kind); setReason('') }
@@ -96,7 +92,12 @@ export default function AdminUmkmDetailPage() {
       closeDialog()
       await loadDetail()
     } catch (e: any) {
-      showToast(e?.userMessage || 'Gagal memperbarui status UMKM.', 'error')
+      if (e?.statusCode === 409) {
+        showToast('Data sudah berubah. Memuat status terbaru...', 'info')
+        await loadDetail()
+      } else {
+        showToast(e?.userMessage || 'Gagal memperbarui status UMKM.', 'error')
+      }
     }
   }
 
@@ -109,7 +110,7 @@ export default function AdminUmkmDetailPage() {
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-lg font-extrabold text-white">{getInitials(record.name)}</span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-extrabold tracking-tight text-ink">{record.name}</h1><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${statusInfo.badge}`}><span className={`size-1.5 rounded-full ${statusInfo.dot}`} />{statusInfo.label}</span></div>
-              <p className="mt-1 text-xs text-muted">{detail.category} â€¢ Terdaftar {formatDate(record.registeredAt)} â€¢ ID {detail.shopId}</p>
+              <p className="mt-1 text-xs text-muted">Terdaftar {formatDate(record.registeredAt)} • ID {detail.shopId}</p>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">{detail.description}</p>
             </div>
           </div>
@@ -125,12 +126,30 @@ export default function AdminUmkmDetailPage() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.8fr_1fr]">
         <div className="space-y-4">
           <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-            <CardHeader icon={Store} title="Profil Toko" subtitle="Informasi utama toko yang didaftarkan pemilik UMKM." right={status === 'pending' ? <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">SLA: {slaLabel}</span> : undefined} />
+            <CardHeader icon={Store} title="Profil Toko" subtitle="Informasi utama toko yang didaftarkan pemilik UMKM." />
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl border border-line p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Alamat</p><p className="mt-1.5 text-sm text-slate-700"><MapPin className="mr-1 inline size-3.5 text-slate-400" />{detail.address}</p></div>
               <div className="rounded-xl border border-line p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Kontak</p><p className="mt-1.5 text-sm text-slate-700"><Mail className="mr-1 inline size-3.5 text-slate-400" />{record.email}</p><p className="mt-1 text-sm text-slate-700">{record.phone}</p></div>
               <div className="rounded-xl border border-line p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">NIB</p><p className="mt-1.5 text-sm font-semibold text-slate-700">{detail.nib || 'Tidak diisi (opsional)'}</p></div>
-              <div className="rounded-xl border border-line p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Foto Usaha</p><p className="mt-1.5 text-sm text-slate-700">{detail.photoLabel}</p></div>
+              <div className="rounded-xl border border-line p-4 sm:col-span-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Foto Usaha</p>
+                {detail.photoUrl ? (
+                  <a
+                    href={detail.photoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 block overflow-hidden rounded-lg border border-line"
+                  >
+                    <img
+                      src={detail.photoUrl}
+                      alt={`Foto usaha ${record.name}`}
+                      className="h-44 w-full object-cover"
+                    />
+                  </a>
+                ) : (
+                  <p className="mt-1.5 text-sm text-slate-700">{detail.photoLabel}</p>
+                )}
+              </div>
             </div>
           </section>
 
@@ -139,8 +158,7 @@ export default function AdminUmkmDetailPage() {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="rounded-xl bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Nama Pemilik</p><p className="mt-1 text-sm font-semibold text-ink">{record.owner}</p></div>
               <div className="rounded-xl bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Email</p><p className="mt-1 text-sm font-semibold text-ink">{record.email}</p></div>
-              <div className="rounded-xl bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">NIK</p><p className="mt-1 text-sm font-semibold text-ink">{detail.ownerNik}</p></div>
-              <div className="rounded-xl bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">Kota</p><p className="mt-1 text-sm font-semibold text-ink">{detail.ownerCity}</p></div>
+
             </div>
           </section>
 
@@ -162,7 +180,7 @@ export default function AdminUmkmDetailPage() {
                   <div className="min-w-0 flex-1 border-b border-line pb-4 last:border-b-0 last:pb-0">
                     <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-ink">{event.title}</p>{event.statusLabel && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{event.statusLabel}</span>}</div>
                     <p className="mt-1 text-xs leading-relaxed text-muted">{event.description}</p>
-                    <p className="mt-1.5 text-[11px] text-slate-400">{formatAuditTime(event.at)}{event.context ? ` â€¢ ${event.context}` : ''}</p>
+                    <p className="mt-1.5 text-[11px] text-slate-400">{formatAuditTime(event.at)}{event.context ? ` • ${event.context}` : ''}</p>
                   </div>
                 </div>
               ))}
@@ -182,7 +200,6 @@ export default function AdminUmkmDetailPage() {
               {status === 'nonaktif' && <button type="button" onClick={() => openDialog('activate')} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover"><Check className="size-4" />Aktifkan Kembali</button>}
               {status === 'ditolak' && <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800"><Info className="mr-1 inline size-4" />UMKM ditolak. Menunggu pemilik memperbaiki data dan mengajukan ulang.</div>}
             </div>
-            {record.status === 'pending' && <p className="mt-3 text-[11px] text-muted">SLA verifikasi: <span className="font-semibold text-amber-700">{slaLabel}</span></p>}
           </section>
 
           <section className="rounded-2xl border border-line bg-white p-5 shadow-sm">

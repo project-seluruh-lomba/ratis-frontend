@@ -43,6 +43,7 @@ export type UmkmDetail = {
   address: string
   coordinates: string
   photoLabel: string
+  photoUrl: string | null
   nib: string | null
   ownerNik: string
   ownerCity: string
@@ -128,7 +129,8 @@ export async function fetchUmkmDetail(idOrSlug: string): Promise<UmkmDetail | un
     description: shop.description || '-',
     address: shop.address || '-',
     coordinates: '',
-    photoLabel: shop.photoUrl ? 'Foto Usaha' : 'Tidak ada foto',
+    photoLabel: shop.photoUrl ? 'Foto Usaha' : 'Tidak diisi (opsional)',
+    photoUrl: shop.photoUrl ?? null,
     nib: shop.nib ?? null,
     ownerNik: '-',
     ownerCity: '-',

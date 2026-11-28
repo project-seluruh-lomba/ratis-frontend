@@ -9,7 +9,6 @@ import {
   Eye,
   EyeOff,
   House,
-  KeyRound,
   Loader2,
   Lock,
   Mail,
@@ -28,19 +27,19 @@ const EMAIL_FORMAT_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const features: { icon: LucideIcon; title: string; description: string }[] = [
   {
     icon: BadgeCheck,
-    title: 'Validasi NIB & Geotagging Otomatis',
-    description: 'Sinkronisasi data pedagang dengan basis data perizinan nasional OSS.',
+    title: 'Verifikasi UMKM Terpusat',
+    description: 'Tinjau profil toko, NIB opsional, dan riwayat status sebelum menyetujui.',
   },
   {
     icon: ShieldCheck,
-    title: 'Audit Trail Kriptografis SHA-256',
+    title: 'Jejak Audit Aktivitas',
     description:
-      'Setiap persetujuan, penolakan, dan perubahan status tercatat permanen tanpa celah modifikasi.',
+      'Setiap persetujuan, penolakan, dan perubahan status tercatat pada log aktivitas admin.',
   },
   {
     icon: Clock3,
-    title: 'Perlindungan Integritas Transaksi',
-    description: 'Akses monitoring read-only tanpa hak manipulasi nota operasional pedagang.',
+    title: 'Pemantauan Hanya Baca',
+    description: 'Pantau pesanan lintas toko tanpa bisa mengubah data operasional pedagang.',
   },
 ]
 
@@ -99,7 +98,7 @@ export default function AdminLoginPage() {
     const trimmedEmail = email.trim()
 
     if (!trimmedEmail) {
-      nextErrors.email = 'Email dinas wajib diisi.'
+      nextErrors.email = 'Email wajib diisi.'
     } else if (!EMAIL_FORMAT_PATTERN.test(trimmedEmail)) {
       nextErrors.email = 'Format email tidak valid.'
     }
@@ -178,8 +177,8 @@ export default function AdminLoginPage() {
           </h1>
 
           <p className="mt-6 max-w-[450px] text-[15px] leading-relaxed text-white/80">
-            Verifikasi legalitas toko baru, pantau aliran pesanan lintas pedagang, dan pastikan
-            kepatuhan standar kualitas nasional secara real-time.
+            Verifikasi toko baru, pantau pesanan lintas pedagang, dan kelola kategori produk
+            bersama dalam satu panel.
           </p>
 
           <ul className="mt-8 space-y-5 border-t border-white/15 pt-7">
@@ -198,11 +197,7 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="relative z-10 flex flex-col gap-2 border-t border-white/15 pt-5 text-[11px] text-white/60 sm:flex-row sm:items-center sm:justify-between">
-          <p>Â© 2026 Platform Ratis UMKM Indonesia.</p>
-          <div className="flex gap-6">
-            <span>Panduan Keamanan</span>
-            <span>Pusat Bantuan Admin</span>
-          </div>
+          <p>© 2026 Platform Ratis UMKM Indonesia.</p>
         </div>
       </aside>
 
@@ -216,14 +211,6 @@ export default function AdminLoginPage() {
               Ratis <span className="ml-1 rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-bold text-primary">Admin</span>
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => setNotice('Hubungi superadmin platform melalui kanal dukungan internal Ratis.')}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 transition hover:text-primary"
-          >
-            <CircleHelp className="size-4" />
-            Butuh Bantuan Akses?
-          </button>
         </header>
 
         <main className="flex flex-1 items-center justify-center px-5 pb-10 sm:px-8">
@@ -236,16 +223,15 @@ export default function AdminLoginPage() {
               Masuk ke Panel Admin
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
-              Gunakan akun resmi dengan role <span className="font-bold text-ink">SUPERADMIN</span>{' '}
-              atau <span className="font-bold text-ink">VERIFIKATOR</span> yang telah terdaftar di
-              direktori Ratis.
+              Gunakan akun resmi dengan role <span className="font-bold text-ink">ADMIN</span>{' '}
+              yang telah terdaftar di platform Ratis.
             </p>
 
             <div className="mt-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm leading-relaxed text-amber-900">
               <AlertTriangle className="mt-0.5 size-[18px] shrink-0 text-amber-600" />
               <p>
                 <span className="font-bold">Proteksi Batas Percobaan:</span> Maksimal 10 percobaan
-                per menit per alamat IP. Sesi login admin berlaku selama 8 jam kerja.
+                per menit per alamat IP. Sesi login admin berlaku selama 8 jam.
               </p>
             </div>
 
@@ -272,7 +258,7 @@ export default function AdminLoginPage() {
             <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-5">
               <div>
                 <label htmlFor="email" className="mb-2 block text-sm font-semibold text-ink">
-                  Alamat Email Dinas <span className="text-red-500">*</span>
+                  Alamat Email <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -296,7 +282,7 @@ export default function AdminLoginPage() {
                   </p>
                 ) : (
                   <p id="email-help" className="mt-1.5 text-xs text-slate-400">
-                    Harus menggunakan domain resmi @ratis.id
+                    Gunakan email admin yang terdaftar di platform
                   </p>
                 )}
               </div>
@@ -306,15 +292,6 @@ export default function AdminLoginPage() {
                   <label htmlFor="password" className="block text-sm font-semibold text-ink">
                     Kata Sandi <span className="text-red-500">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setNotice('Pemulihan kata sandi dilakukan oleh superadmin Ratis.')
-                    }
-                    className="text-xs font-semibold text-primary transition hover:text-primary-hover hover:underline"
-                  >
-                    Lupa Sandi?
-                  </button>
                 </div>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -374,39 +351,14 @@ export default function AdminLoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 flex items-center gap-3">
-              <span className="h-px flex-1 bg-line" />
-              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Prosedur Keamanan Khusus
-              </span>
-              <span className="h-px flex-1 bg-line" />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setNotice('Metode FIDO2 / SSO belum tersedia di versi demo ini.')}
-              className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white px-6 text-sm font-semibold text-ink transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15"
-            >
-              <KeyRound className="size-4 text-slate-500" />
-              Masuk Menggunakan Kunci Keamanan FIDO2 / SSO
-            </button>
-
             <p className="mt-6 text-center text-xs leading-relaxed text-slate-500">
-              Bukan staf pengelola portal? Kunjungi{' '}
-              <button
-                type="button"
-                onClick={() => setNotice('Halaman publik Ratis akan tersedia pada rilis berikutnya.')}
-                className="font-semibold text-primary transition hover:text-primary-hover hover:underline"
-              >
-                Halaman Utama Publik Ratis
-              </button>{' '}
-              atau{' '}
+              Bukan staf pengelola portal?{' '}
               <button
                 type="button"
                 onClick={() => navigate('/')}
                 className="font-semibold text-primary transition hover:text-primary-hover hover:underline"
               >
-                Portal Mitra Pedagang
+                Masuk ke Portal Mitra Pedagang
               </button>
             </p>
           </section>

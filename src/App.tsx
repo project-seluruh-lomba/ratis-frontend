@@ -5,7 +5,6 @@ import AdminCategoryPage from './pages/admin/AdminCategoryPage'
 import AdminCategoryAddPage from './pages/admin/AdminCategoryAddPage'
 import AdminCategoryEditPage from './pages/admin/AdminCategoryEditPage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
-import AdminFinancialReportPage from './pages/admin/AdminFinancialReportPage'
 import AdminLoginPage from './pages/admin/AdminLoginPage'
 import AdminMonitoringOrderPage from './pages/admin/AdminMonitoringOrderPage'
 import AdminStoreAuditLogPage from './pages/admin/AdminStoreAuditLogPage'
@@ -84,7 +83,6 @@ export default function App() {
           element={<AdminCategoryEditPage />}
         />
         <Route path="/admin/pesanan" element={<AdminMonitoringOrderPage />} />
-        <Route path="/admin/laporan-keuangan" element={<AdminFinancialReportPage />} />
         <Route path="/admin/pengguna" element={<AdminUserManagementPage />} />
         <Route path="/admin/kelola-pengguna" element={<AdminUserManagementPage />} />
         <Route

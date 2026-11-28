@@ -39,7 +39,6 @@ type ActivityCategory =
   | 'Kategori'
   | 'Pengguna'
   | 'Autentikasi'
-  | 'Payout'
 
 type ActivityEntry = {
   id: string
@@ -115,7 +114,6 @@ const activityCategories: ActivityCategory[] = [
   'Kategori',
   'Pengguna',
   'Autentikasi',
-  'Payout',
 ]
 
 const actionPresentation: Record<
@@ -186,12 +184,6 @@ const actionPresentation: Record<
     tone: 'rose',
     referenceTone: 'text-rose-500',
     description: (name) => `Menonaktifkan akun ${name}.`,
-  },
-  PROCESS_PAYOUT_BATCH: {
-    category: 'Payout',
-    tone: 'teal',
-    referenceTone: 'text-teal-600',
-    description: () => 'Memproses batch pencairan dana UMKM.',
   },
 }
 

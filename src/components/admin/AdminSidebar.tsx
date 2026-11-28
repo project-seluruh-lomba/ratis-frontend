@@ -1,6 +1,5 @@
 ﻿import { NavLink } from 'react-router-dom'
 import {
-  BarChart3,
   Boxes,
   History,
   House,
@@ -23,7 +22,6 @@ const navigation = [
   { label: 'Kelola UMKM', to: '/admin/umkm', icon: Store, badge: 'pending' },
   { label: 'Kelola Kategori', to: '/admin/kategori', icon: Boxes },
   { label: 'Monitoring Pesanan', to: '/admin/pesanan', icon: ShoppingBag },
-  { label: 'Laporan Keuangan', to: '/admin/laporan-keuangan', icon: BarChart3 },
   { label: 'Kelola Pengguna', to: '/admin/kelola-pengguna', icon: Users },
   { label: 'Log Aktivitas', to: '/admin/log', icon: History, tag: 'Cloud' },
 ]

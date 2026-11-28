@@ -18,8 +18,6 @@ export type CategoryRecord = {
   icon: CategoryIconKey
 }
 
-export const categoryMonthlyGrowth = 0
-
 function iconFor(name: string): CategoryIconKey {
   const n = name.toLowerCase()
   if (n.includes('kuliner') || n.includes('makan')) return 'kuliner'
@@ -45,10 +43,6 @@ export async function updateCategory(id: string, body: { name?: string; status?:
 }
 export async function deleteCategory(id: string) { await categoriesApi.remove(id) }
 
-// Legacy exports
-export const categoryRecords: CategoryRecord[] = []
-export function loadCategories() { return [] as CategoryRecord[] }
-export function persistCategories(_records: CategoryRecord[]) {}
 export function slugifyCategoryName(name: string) {
   return name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/&/g, 'dan').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').replace(/-{2,}/g, '-')
 }

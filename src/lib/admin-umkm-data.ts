@@ -29,27 +29,16 @@ export type UmkmAuditEvent = {
   tone: UmkmAuditTone
 }
 
-export type UmkmProductPreview = {
-  name: string
-  price: string
-}
-
 export type UmkmDetail = {
   record: UmkmRecord
   shopId: string
-  category: string
-  region: string
   description: string
   address: string
-  coordinates: string
   photoLabel: string
   photoUrl: string | null
   nib: string | null
-  ownerNik: string
-  ownerCity: string
   productSkus: number
   ordersProcessed: number
-  productPreviews: UmkmProductPreview[]
   auditTrail: UmkmAuditEvent[]
 }
 
@@ -124,19 +113,13 @@ export async function fetchUmkmDetail(idOrSlug: string): Promise<UmkmDetail | un
   return {
     record,
     shopId: shop.id,
-    category: '-',
-    region: '-',
     description: shop.description || '-',
     address: shop.address || '-',
-    coordinates: '',
     photoLabel: shop.photoUrl ? 'Foto Usaha' : 'Tidak diisi (opsional)',
     photoUrl: shop.photoUrl ?? null,
     nib: shop.nib ?? null,
-    ownerNik: '-',
-    ownerCity: '-',
     productSkus: shop.summary?.productCount ?? 0,
     ordersProcessed: shop.summary?.orderCount ?? 0,
-    productPreviews: [],
     auditTrail: history.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
   }
 }
@@ -144,10 +127,4 @@ export async function fetchUmkmDetail(idOrSlug: string): Promise<UmkmDetail | un
 export async function approveUmkm(id: string) { return shopsApi.approve(id) }
 export async function rejectUmkm(id: string, reason: string) { return shopsApi.reject(id, reason) }
 export async function setUmkmStatus(id: string, status: 'aktif' | 'nonaktif', reason?: string) { return shopsApi.updateStatus(id, status, reason) }
-
-// Legacy exports kept for non-migrated pages
-export const umkmRecords: UmkmRecord[] = []
-export function applyUmkmStatusOverrides(records: UmkmRecord[]) { return records }
-export function persistUmkmStatus(_slug: string, _status: UmkmStatus) { /* noop: use API */ }
-export function getUmkmDetail(_slug: string): UmkmDetail | undefined { return undefined }
 

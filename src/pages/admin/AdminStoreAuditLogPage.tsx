@@ -39,7 +39,6 @@ const actionLabels: Record<string, string> = {
   DELETE_CATEGORY: 'Hapus kategori',
   ACTIVATE_USER: 'Aktifkan pengguna',
   DEACTIVATE_USER: 'Nonaktifkan pengguna',
-  PROCESS_PAYOUT_BATCH: 'Proses batch pencairan',
 }
 
 const actionCategory: Record<string, string> = {
@@ -53,10 +52,9 @@ const actionCategory: Record<string, string> = {
   ACTIVATE_USER: 'Pengguna',
   DEACTIVATE_USER: 'Pengguna',
   LOGIN: 'Autentikasi',
-  PROCESS_PAYOUT_BATCH: 'Payout',
 }
 
-const categoryFilters = ['Semua', 'Verifikasi UMKM', 'Kategori', 'Pengguna', 'Payout'] as const
+const categoryFilters = ['Semua', 'Verifikasi UMKM', 'Kategori', 'Pengguna'] as const
 
 function formatDate(iso: string) {
   return dateTimeFormatter.format(new Date(iso))

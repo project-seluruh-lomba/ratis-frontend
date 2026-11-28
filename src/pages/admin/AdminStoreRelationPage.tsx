@@ -536,12 +536,6 @@ export default function AdminStoreRelationPage() {
                 </p>
               </div>
             )}
-            <p className="mt-2 text-[9px] leading-relaxed text-muted">
-              Dana pencairan tertahan:{' '}
-              <span className="font-semibold text-ink">
-                {formatRupiah(shop.summary.outstandingPayout)}
-              </span>
-            </p>
           </section>
 
           <section className="rounded-2xl border border-line bg-white p-4 shadow-sm">

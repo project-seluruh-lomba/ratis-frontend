@@ -409,7 +409,6 @@ export default function AdminDashboardPage() {
             <div className="flex flex-col gap-3 border-t border-line bg-slate-50/50 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[11px] text-muted">Menampilkan <span className="font-semibold text-slate-700">{topShopsData.length}</span> toko beromzet tertinggi.</p>
               <div className="flex items-center gap-5">
-                <Link to="/admin/laporan-keuangan" className="text-[11px] font-semibold text-muted transition hover:text-slate-700">Lihat Laporan Keuangan</Link>
                 <Link to="/admin/umkm?status=aktif" className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary transition hover:text-primary-hover">Buka Direktori UMKM <ArrowRight className="size-3.5" /></Link>
               </div>
             </div>

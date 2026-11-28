@@ -2,10 +2,8 @@
 import type {
   AdminLogEntry,
   AdminOrderDetail,
-  BatchPayoutResult,
   Category,
   DashboardData,
-  FinanceSummary,
   LoginResponse,
   ManagedUser,
   OrderStatus,
@@ -13,7 +11,6 @@ import type {
   PaginatedLogs,
   PaginatedOrders,
   PaginatedUsers,
-  PayoutRecord,
   ShopDetail,
   ShopListItem,
   ShopStatus,
@@ -43,12 +40,6 @@ export const categoriesApi = {
 
 export const dashboardApi = {
   get: (range: 7 | 30) => api.get<DashboardData>('/admin/dashboard', { params: { range } }).then((r) => r.data),
-};
-
-export const payoutsApi = {
-  list: () => api.get<PayoutRecord[]>('/admin/payouts').then((r) => r.data),
-  processBatch: (ids: string[]) =>
-    api.post<BatchPayoutResult>('/admin/payouts/batch-process', { ids }).then((r) => r.data),
 };
 
 export const ordersApi = {
@@ -87,11 +78,6 @@ export const usersApi = {
         ...(reason ? { reason } : {}),
       })
       .then((r) => r.data),
-};
-
-export const financeApi = {
-  get: (params: { from?: string; to?: string }) =>
-    api.get<FinanceSummary>('/admin/finance', { params }).then((r) => r.data),
 };
 
 export const logsApi = {
